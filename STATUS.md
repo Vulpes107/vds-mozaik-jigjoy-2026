@@ -9,7 +9,7 @@ Each machine edits **only its own section**. Update at every push. Blockers go i
 Phase 0 — contracts, shared runtime, skeleton
 
 ## Machine A — orchestrator / contracts
-- Done (branch `a/allocator`): contracts additive pass; new events; `src/shared/validate.ts`; Allocator (pure `allocate` + participant, seeded tests); Topic Planner with validated `submit_topics`; Cartographer -> `AgentEvent`; Operator checkpoint `cp_topics`; REST+SSE API (`src/orchestrator/server.ts`, ADR 0001); Meter (tokens/USD -> `spend.recorded`); JSON snapshots + `resumeRun`; `budgetInterceptor(topicId)` for workers' `runLoop`; CI; gateway models
+- Done (branch `a/allocator`): contracts additive pass; new events; `src/shared/validate.ts`; Allocator (pure `allocate` + participant, seeded tests); Topic Planner with validated `submit_topics`; Cartographer -> `AgentEvent`; Operator checkpoint `cp_topics`; REST+SSE API (`src/orchestrator/server.ts`, ADR 0001); Meter (tokens/USD -> `spend.recorded`); JSON snapshots + `resumeRun`; `budgetInterceptor(topicId)` for workers' `runLoop`; CI; gateway models; audit must-fixes (localhost-only API, default run budget `{usd: 2, seconds: 1800}`, unhandled-rejection guard, stale `task.finished` guard, scout-no-score retry, `allocator.tick` task timeouts + wall clock)
 - For B/C: import `validate` from `src/shared/validate.ts`; pass `budgetInterceptor(topicId)` as 4th arg of `runLoop`; start a run with `startRun(profile, opts)` from `src/orchestrator/run.ts` or `POST /runs`
 - Next: PR to main; per-topic `budget` set by planner/allocator; analyst-proposed topics (`topic.suggested`) scored by Planner; clarifying-questions checkpoint for thin profiles
 - Blockers:
