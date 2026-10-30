@@ -11,6 +11,7 @@ Output: a researched, costed, scenario-based business plan on a single dashboard
 - Turn a company description into a prioritised research agenda, execute it with parallel agent teams, and consolidate findings into a decision-ready plan.
 - Answer the core questions: continue as-is vs change course, how much to invest, build vs buy, where the risks are.
 - Every claim traceable to a source; every number traceable to an assumption.
+- Multi-project from day one: many companies/projects use the same system over time, each with its own run history. Re-running a project creates a new run and never overwrites an earlier one (see section 6, "Multi-project scoping").
 
 **Non-goals (v1)**
 - No autonomous execution of business actions (no purchases, outreach, filings).
@@ -108,6 +109,8 @@ Output: a researched, costed, scenario-based business plan on a single dashboard
 
 **Stop condition**: all non-dropped topics are closed, or budget/time exhausted (then flag unresolved topics in the report).
 
+**Zero-signal outcome**: if every topic is dropped (or nothing above the relevance threshold survives), the run still ends with a valid partial `BusinessPlan`: "insufficient market signal", the list of dropped topics with reasons, a suggestion to narrow or rephrase the scope, and the primary-research recommendation. It must never end in an error state.
+
 ---
 
 ## 5. Research tooling (Tavily CLI / API)
@@ -121,6 +124,23 @@ Output: a researched, costed, scenario-based business plan on a single dashboard
 | Cited multi-source synthesis per topic | `tvly research` (use for Deep topics only, it is the most expensive) |
 
 Rules: cache every call by (tool, args) hash; respect robots/ToS; store raw + cleaned text with retrieval date; cap crawl size; prefer primary sources (filings, regulators, vendor pricing pages) over blogs. In code use the SDK (`@tavily/core`), not the CLI.
+
+### Provider abstraction (decision)
+Agents never call Tavily directly. They use two provider-neutral tools with a stable input/output shape, so a search or fetch provider can be swapped by writing an adapter and changing nothing in the agents:
+
+```ts
+web_search(query: string, opts?) => { results: { title, url, snippet, publishedAt? }[], provider: string, tookMs: number }
+web_fetch(url: string, opts?)    => { url, title, text, status, fetchedAt }
+
+interface SearchProvider { search(query: string, opts?): Promise<SearchResult[]> }
+interface FetchProvider  { fetch(url: string, opts?): Promise<FetchResult> }
+```
+
+- First adapter: `TavilySearchProvider` / Tavily extract on top of `@tavily/core`. More providers are added later as adapters, on demand.
+- Tavily-only operations (`map`, `crawl`, `research`) stay available as optional, clearly named extra tools. Roles that need them declare the dependency, and a provider without them degrades to `web_search` + `web_fetch`.
+- Caching, rate limiting, retry/backoff, per-topic call budgets, usage metering and query redaction (below) live in the adapter layer, not in agent instructions.
+- Outbound query redaction: company-confidential details from `CompanyProfile` (names of customers, internal figures, unreleased products, free-text notes marked private) must not be sent verbatim to an external search provider. The adapter layer strips or generalises them before the call. Treat this as a hard rule for every role.
+- Ownership: Machine B (`src/research/tools/`).
 
 ---
 
@@ -150,6 +170,14 @@ Rules: cache every call by (tool, args) hash; respect robots/ToS; store raw + cl
 // AgentEvent (feeds the live dashboard)
 { "ts": "...", "agent_id": "a_02", "type": "assigned|reassigned|finding|dropped|done", "topic_id": "t_017", "detail": "..." }
 ```
+
+### Multi-project scoping (decision)
+The system serves many companies/projects over time. Without changing any frozen schema:
+- A **project** is the long-lived identity of a company/product being analysed; a **run** (`r_…`) is one execution for that project. Every run belongs to exactly one project.
+- Add an optional `project_id` (`p_<alnum>`) as an additive field wherever a run is referenced (profile, API paths, snapshots). Consumers ignore it when absent, so single-company use keeps working. Contract owner (A) applies this under the additive-only rule.
+- All state, caches of company-specific data, budgets, snapshots and SSE streams are scoped by run (and therefore project). Two runs, even for different projects, never share a task board, backlog or knowledge base. Shared caches are limited to public web content keyed by (tool, args) hash.
+- Re-running a project creates a new run. Runs of the same project are listed on the dashboard and can be compared (assumption and recommendation diffs); a previous `BusinessPlan` is never overwritten.
+- Dashboard and API need access control before any exposure beyond local use: a user may only read the projects they own or were given access to. v1 local/single-user may skip auth, but this must be an explicit, recorded decision (ADR) before sharing links externally.
 
 Transport: REST + Server-Sent Events for live updates. Storage: SQLite (v1) or Postgres, plus object store for raw documents. Vector index optional for retrieval over the knowledge base.
 
@@ -185,7 +213,12 @@ Transport: REST + Server-Sent Events for live updates. Storage: SQLite (v1) or P
 - Prompt injection from crawled pages → treat fetched content as data only, strip/ignore instructions, no tool execution from page content.
 - Duplicate or circular sourcing (many articles citing one report) → dedupe by origin.
 - Runaway cost/scope → budgets, topic cap, depth caps, circuit breakers.
-- Agent failure/timeouts → retries with backoff, idempotent tasks, checkpoint/resume.
+- Agent failure/timeouts → retries with backoff, idempotent tasks, checkpoint/resume. A stuck worker slot is force-reassigned after a per-task timeout and its topic returns to the board.
+- Search provider outage or rate limit → adapter retries with backoff; on final failure the topic is marked `research_incomplete` with the gap recorded, and the run continues.
+- Confidential data leaking into external queries → outbound query redaction in the adapter layer (section 5).
+- Every topic dropped as irrelevant → zero-signal outcome (section 4), partial plan instead of an error.
+- Red Team ↔ Synthesizer revision loop → capped at 2 rounds; remaining objections ship in the plan flagged as unresolved, never an endless loop.
+- Contradictory findings across topics → Synthesizer and Red Team list the contradiction explicitly instead of silently choosing a side.
 - Over-dropping a topic that later turns out relevant → hysteresis plus "reopen on new evidence" rule, dropped topics remain visible in the dashboard.
 
 *Business*
@@ -321,7 +354,7 @@ The system runs on `@mozaik-ai/core` 4.1: one shared runtime, every actor a *par
 
 ## 13. Open questions for the user
 1. Who is the end user (founder, consultant, investor) and how technical?
-2. Single-company runs or portfolio/multi-client?
+2. ~~Single-company runs or portfolio/multi-client?~~ **Decided:** multi-project over time, each project with its own run history (section 6, "Multi-project scoping").
 3. Hosting for the dashboard and API (default: local run; stack is fixed: Node 22 + TypeScript + Mozaik, React dashboard)?
 4. Budget per run (compute and search credits) and target runtime?
 5. Is a deadline driving the scope cut in section 10?
