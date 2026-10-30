@@ -64,6 +64,41 @@ export class AnalysisSession {
 	}
 
 	/**
+	 * A "do nothing" baseline must always exist (root CLAUDE.md rule 9). When the Financial stage did not create one
+	 * (stage token cap, timeout, model error), build an illustrative one from the company profile's own figures so the
+	 * plan can still be assembled. Returns true when it had to.
+	 */
+	ensureBaseline(): boolean {
+		if ([...this.specs.values()].some((s) => s.kind === "do_nothing")) return false
+		const p = (this.state.profile ?? {}) as Record<string, unknown>
+		const f = (p.financials ?? {}) as Record<string, unknown>
+		const currency = typeof p.currency === "string" ? p.currency : "EUR"
+		const add = (text: string, base: number) => {
+			const id = this.nextAssumptionId()
+			const obj: Obj = { schema_version: "1.0", id, run_id: this.state.runId, text, unit: currency, low: base * 0.85, base, high: base * 1.15, basis_finding_ids: [], origin: "default", confidence: 0.3 }
+			assertValid("assumption", obj)
+			this.state.assumptions.set(id, obj)
+			return id
+		}
+		const revenue = add("Annual revenue as stated in the company profile (illustrative baseline, no research basis)", typeof f.annual_revenue === "number" ? f.annual_revenue : 0)
+		const opex = add("Annual operating cost from the profile's monthly burn (illustrative baseline, no research basis)", typeof f.monthly_burn === "number" ? f.monthly_burn * 12 : 0)
+		this.computeSpec({
+			id: "sc_baseline",
+			name: "Do nothing (illustrative baseline from the company profile)",
+			kind: "do_nothing",
+			currency,
+			years: typeof p.horizon_years === "number" ? p.horizon_years : 3,
+			discount_rate: 0.1,
+			contingency_pct: 0,
+			opening_cash: this.defaultOpeningCash(),
+			revenue,
+			opex,
+			notes: "Built by code from the company profile because the Financial stage produced no do_nothing scenario.",
+		})
+		return true
+	}
+
+	/**
 	 * Recompute everything from the current assumptions (including dashboard overrides) and rebuild the plan.
 	 * Pure engine work - no LLM - so it is safe to call on every edit. Returns null until a do_nothing baseline exists.
 	 */

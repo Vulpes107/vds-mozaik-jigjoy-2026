@@ -48,7 +48,7 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 		const s = state
 		const rest = parts.slice(2)
 		if (req.method === "GET" && rest.length === 0) {
-			return json(res, 200, { run_id: s.runId, project_id: s.profile?.project_id, status: runStatus(s), budget: s.runBudget, spent: s.spent, topics: s.topics.size, slots: Object.fromEntries(s.slots), checkpoints: [...s.checkpoints.values()] })
+			return json(res, 200, { run_id: s.runId, project_id: s.profile?.project_id, status: runStatus(s), profile: s.profile, budget: s.runBudget, spent: s.spent, topics: s.topics.size, slots: Object.fromEntries(s.slots), checkpoints: [...s.checkpoints.values()] })
 		}
 		if (req.method === "GET" && rest[0] === "topics") return json(res, 200, [...s.topics.values()])
 		if (req.method === "GET" && rest[0] === "findings") return json(res, 200, [...s.findings.values()])

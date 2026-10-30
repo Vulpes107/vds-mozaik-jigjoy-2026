@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { AgentEvent, Assumption, BusinessPlan, CompanyProfile, Finding, Scenario, Source, Topic } from "./types/contracts.ts"
 
-export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8787"
+/** Same origin by default: Vite proxies `/runs` to the orchestrator (see vite.config.ts). */
+export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 const params = new URLSearchParams(location.search)
-export const RUN_ID = params.get("run") ?? (import.meta.env.VITE_RUN_ID as string | undefined) ?? "r_demo1"
+/** `?run=<id>` / `VITE_RUN_ID`, else the newest run listed by `GET /runs` (resolved on first load). */
+export let RUN_ID = params.get("run") ?? (import.meta.env.VITE_RUN_ID as string | undefined) ?? ""
 /** `?ro=1` is the read-only share view: no assumption editing, no checkpoint buttons. */
 export const READ_ONLY = params.get("ro") === "1"
 
@@ -55,6 +57,12 @@ export function useRun() {
 
 	const load = useCallback(async () => {
 		try {
+			if (!RUN_ID) {
+				const r = await fetch(`${API}/runs`)
+				if (!r.ok) throw new Error(`/runs: HTTP ${r.status}`)
+				RUN_ID = ((await r.json()) as { run_id: string }[])[0]?.run_id ?? ""
+				if (!RUN_ID) throw new Error("no run yet")
+			}
 			const [run, topics, findings, sources, assumptions, scenarios, plan] = await Promise.all([
 				get<RunSummary>(""),
 				get<Topic[]>("/topics"),
@@ -77,19 +85,25 @@ export function useRun() {
 	}, [load])
 
 	useEffect(() => {
-		void load()
-		const es = new EventSource(`${API}/runs/${RUN_ID}/events`)
-		es.onopen = () => setData((d) => (d.conn === "offline" ? d : { ...d, conn: "live" }))
-		es.onerror = () => setData((d) => ({ ...d, conn: d.run ? "reconnecting" : "offline" }))
-		const onEvent = (m: MessageEvent) => {
-			const e = JSON.parse(m.data as string) as AgentEvent
-			setData((d) => (d.events.some((x) => x.seq === e.seq && e.seq !== undefined) ? d : { ...d, conn: d.conn === "reconnecting" ? "live" : d.conn, events: [...d.events, e] }))
-			refreshSoon()
-		}
-		// The server names SSE events by type; listen to all contract types.
-		for (const t of EVENT_TYPES) es.addEventListener(t, onEvent as EventListener)
+		let es: EventSource | undefined
+		let gone = false
+		// The stream opens once the run id is known (the first load may have to look it up).
+		void load().then(() => {
+			if (gone || !RUN_ID) return
+			es = new EventSource(`${API}/runs/${RUN_ID}/events`)
+			es.onopen = () => setData((d) => (d.conn === "offline" ? d : { ...d, conn: "live" }))
+			es.onerror = () => setData((d) => ({ ...d, conn: d.run ? "reconnecting" : "offline" }))
+			const onEvent = (m: MessageEvent) => {
+				const e = JSON.parse(m.data as string) as AgentEvent
+				setData((d) => (d.events.some((x) => x.seq === e.seq && e.seq !== undefined) ? d : { ...d, conn: d.conn === "reconnecting" ? "live" : d.conn, events: [...d.events, e] }))
+				refreshSoon()
+			}
+			// The server names SSE events by type; listen to all contract types.
+			for (const t of EVENT_TYPES) es.addEventListener(t, onEvent as EventListener)
+		})
 		return () => {
-			es.close()
+			gone = true
+			es?.close()
 			window.clearTimeout(timer.current)
 		}
 	}, [load, refreshSoon])
@@ -110,6 +124,14 @@ export function useRun() {
 		[load],
 	)
 	return { data, overrideAssumption, resolveCheckpoint, reload: load }
+}
+
+/** `POST /runs` with a CompanyProfile; the server validates it and answers 409 if it already hosts a run. */
+export async function startRun(profile: CompanyProfile): Promise<string> {
+	const r = await fetch(`${API}/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile }) })
+	const b = (await r.json()) as { run_id?: string; error?: string }
+	if (!r.ok || !b.run_id) throw new Error(b.error ?? `POST /runs: HTTP ${r.status}`)
+	return b.run_id
 }
 
 const EVENT_TYPES: AgentEvent["type"][] = [

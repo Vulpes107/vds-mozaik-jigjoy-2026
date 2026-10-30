@@ -97,10 +97,10 @@ const ROLES_NEEDED: Record<string, WorkerRole[]> = {
 }
 
 // Per-board scratch state that is not part of the Topic contract.
-const history = new WeakMap<Board, { confidence: Map<string, number[]>; rolesDone: Map<string, Set<WorkerRole>>; warned: Set<string>; analysisRequested: boolean }>()
+const history = new WeakMap<Board, { confidence: Map<string, number[]>; rolesDone: Map<string, Set<WorkerRole>>; warned: Set<string>; analysisRequested: boolean; approved: boolean }>()
 function scratch(board: Board) {
 	let s = history.get(board)
-	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false }))
+	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false }))
 	return s
 }
 
@@ -151,6 +151,10 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 	}
 
 	switch (event.type) {
+		case EV.TopicApproved: {
+			sc.approved = true
+			break
+		}
 		case EV.TopicScored: {
 			const p = event.payload as TopicScoredPayload
 			const t = topic(p.topicId)
@@ -294,8 +298,8 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		}
 	}
 
-	// Fill idle slots: highest priority topic that still wants this slot's role.
-	if (!exhausted) {
+	// Fill idle slots: highest priority topic that still wants this slot's role. Never before the human approved the topic list.
+	if (!exhausted && sc.approved) {
 		for (const [slotId, s] of board.slots) {
 			if (s.topicId !== null || s.reassignments >= cfg.maxReassignments) continue
 			const candidates = [...board.topics.values()]

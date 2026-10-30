@@ -105,6 +105,9 @@ function handle(req, res) {
 			await readBody(req) // drain; mock server always serves the one fixed demo run
 			return json(res, 201, { run_id: RUN_ID })
 		}
+		if (req.method === "GET" && parts.length === 1 && parts[0] === "runs") {
+			return json(res, 200, [{ run_id: RUN_ID, project_id: profile.project_id ?? null, company: profile.name ?? null, status: runStatus(), saved_at: new Date().toISOString(), spent_usd: 0.4 }])
+		}
 		if (parts[0] !== "runs" || parts[1] !== RUN_ID) return json(res, 404, { error: "not found" })
 		const rest = parts.slice(2)
 

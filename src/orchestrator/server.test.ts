@@ -25,7 +25,9 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 	assert.equal(r.status, 200)
 	assert.ok(Array.isArray(await r.json()))
 	assert.equal((await api(`/runs/${run_id}/plan`)).status, 404)
-	assert.equal(((await (await api(`/runs/${run_id}`)).json()) as { status: string }).status, "planning")
+	const summary = (await (await api(`/runs/${run_id}`)).json()) as { status: string; profile: { name: string } }
+	assert.equal(summary.status, "planning")
+	assert.equal(summary.profile.name, (profile as { name: string }).name) // the dashboard header reads it
 
 	// Stand in for the Planner: put topics on the board and announce them.
 	const { resolveRuntime } = await import("../shared/runtime.ts")
