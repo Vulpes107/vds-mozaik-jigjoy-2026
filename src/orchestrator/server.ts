@@ -5,6 +5,8 @@ import type { Obj, RunState } from "../shared/runtime.ts"
 import { onAgentEvent } from "./cartographer.ts"
 import { resolveCheckpoint } from "./operator.ts"
 import { overrideAssumption, startRun, type RunOptions } from "./run.ts"
+import { runStatus } from "./snapshot.ts"
+import { openStore } from "./store.ts"
 
 let state: RunState | undefined
 
@@ -17,15 +19,6 @@ async function body(req: IncomingMessage): Promise<unknown> {
 	for await (const c of req) s += c
 	return s ? JSON.parse(s) : {}
 }
-function status(s: RunState): string {
-	if (s.plan) return "done"
-	if (s.agentEvents.some((e) => e.type === "run_completed")) return "stopped"
-	if ([...s.checkpoints.values()].some((c) => c.status === "pending")) return "awaiting_checkpoint"
-	if (s.agentEvents.some((e) => e.type === "analysis_started")) return "analysis"
-	if (s.topics.size === 0) return "planning"
-	return "researching"
-}
-
 export function handle(req: IncomingMessage, res: ServerResponse): void {
 	void (async () => {
 		const url = new URL(req.url ?? "/", "http://x")
@@ -47,11 +40,15 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 			}
 			return json(res, 201, { run_id: state.runId })
 		}
+		if (req.method === "GET" && parts.length === 1 && parts[0] === "runs") {
+			const project = url.searchParams.get("project_id") ?? undefined
+			return json(res, 200, openStore().list(project))
+		}
 		if (parts[0] !== "runs" || !state || parts[1] !== state.runId) return json(res, 404, { error: "not found" })
 		const s = state
 		const rest = parts.slice(2)
 		if (req.method === "GET" && rest.length === 0) {
-			return json(res, 200, { run_id: s.runId, project_id: s.profile?.project_id, status: status(s), budget: s.runBudget, spent: s.spent, topics: s.topics.size, slots: Object.fromEntries(s.slots), checkpoints: [...s.checkpoints.values()] })
+			return json(res, 200, { run_id: s.runId, project_id: s.profile?.project_id, status: runStatus(s), budget: s.runBudget, spent: s.spent, topics: s.topics.size, slots: Object.fromEntries(s.slots), checkpoints: [...s.checkpoints.values()] })
 		}
 		if (req.method === "GET" && rest[0] === "topics") return json(res, 200, [...s.topics.values()])
 		if (req.method === "GET" && rest[0] === "findings") return json(res, 200, [...s.findings.values()])

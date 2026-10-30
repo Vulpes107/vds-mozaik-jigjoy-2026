@@ -1,7 +1,8 @@
-// JSON snapshot of RunState (storage v1) for crash recovery and the dashboard's run history.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+// Snapshot of RunState for crash recovery and the dashboard's run history, kept in SQLite (ADR 0002).
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Obj, RunState, Slot } from "../shared/runtime.ts"
+import { openStore } from "./store.ts"
 
 export interface Snapshot {
 	runId: string
@@ -56,17 +57,27 @@ export function restore(s: RunState, snap: Snapshot): RunState {
 	return s
 }
 
-export function snapshotPath(runId: string, dir = "data"): string {
-	return join(dir, `${runId}.json`)
+export function runStatus(s: RunState): string {
+	if (s.plan) return "done"
+	if (s.agentEvents.some((e) => e.type === "run_completed")) return "stopped"
+	if ([...s.checkpoints.values()].some((c) => c.status === "pending")) return "awaiting_checkpoint"
+	if (s.agentEvents.some((e) => e.type === "analysis_started")) return "analysis"
+	if (s.topics.size === 0) return "planning"
+	return "researching"
 }
 
+/** Upsert the run's latest snapshot into `<dir>/mozaik.db`; returns the database path. */
 export function writeSnapshot(s: RunState, dir = "data"): string {
-	mkdirSync(dir, { recursive: true })
-	const path = snapshotPath(s.runId, dir)
-	writeFileSync(path, JSON.stringify(snapshot(s)))
-	return path
+	const snap = snapshot(s)
+	openStore(dir).save(s.runId, snap.savedAt, { projectId: s.profile?.project_id as string | undefined, company: s.profile?.name as string | undefined, status: runStatus(s), spentUsd: s.spent.usd }, JSON.stringify(snap))
+	return join(dir, "mozaik.db")
 }
 
+/** Reads the run from the database; falls back to a pre-ADR-0002 `<dir>/<runId>.json` file. */
 export function readSnapshot(runId: string, dir = "data"): Snapshot {
-	return JSON.parse(readFileSync(snapshotPath(runId, dir), "utf8")) as Snapshot
+	const stored = openStore(dir).load(runId)
+	if (stored) return JSON.parse(stored) as Snapshot
+	const legacy = join(dir, `${runId}.json`)
+	if (existsSync(legacy)) return JSON.parse(readFileSync(legacy, "utf8")) as Snapshot
+	throw new Error(`no snapshot for run ${runId} in ${dir}`)
 }
