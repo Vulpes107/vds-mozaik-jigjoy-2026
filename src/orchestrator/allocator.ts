@@ -123,11 +123,16 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		t.state_reason = reason
 		t.updated_at = new Date(now).toISOString()
 	}
-	const freedFrom = new Map<string, string>()
-	const free = (slotId: string, fromTopicId: string | null) => {
+	/** Where each slot freed this event came from (reported on the next assignment), and which of those were pulled off mid-work (the only moves counted against anti-thrash limits). */
+	const movedFrom = new Map<string, string>()
+	const preempted = new Set<string>()
+	const free = (slotId: string, fromTopicId: string | null, midWork = true) => {
 		const s = board.slots.get(slotId)
 		if (!s) return
-		if (s.topicId) freedFrom.set(slotId, s.topicId)
+		if (s.topicId) {
+			movedFrom.set(slotId, s.topicId)
+			if (midWork) preempted.add(slotId)
+		}
 		s.topicId = null
 		if (fromTopicId) {
 			const t = topic(fromTopicId)
@@ -158,6 +163,8 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				break
 			}
 			if (!LIVE.includes(t.state)) break
+			// The scout's job is done either way; its slot moves on (not a reassignment).
+			for (const [id, s] of board.slots) if (s.topicId === t.id && s.role === "scout") free(id, t.id, false)
 			if (p.relevance < cfg.dropBelow) {
 				setState(t, "dropped", `relevance ${p.relevance} < ${cfg.dropBelow}: ${p.rationale}`)
 				freeAllOn(t.id)
@@ -166,15 +173,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			} else {
 				setState(t, "deep", `impact ${p.impact} >= ${cfg.deepImpact}: ${p.rationale}`)
 			}
-			// The scout's job is done either way; its slot moves on.
-			for (const [id, s] of board.slots) if (s.topicId === t.id && s.role === "scout") free(id, t.id)
 			break
 		}
 		case EV.TaskFinished: {
 			const p = event.payload as TaskFinishedPayload
 			const t = topic(p.topicId)
 			// A late finish for a topic this slot already left must not free the slot's new assignment.
-			if (board.slots.get(p.slotId)?.topicId === p.topicId) free(p.slotId, p.topicId)
+			if (board.slots.get(p.slotId)?.topicId === p.topicId) free(p.slotId, p.topicId, false)
 			if (!t || !LIVE.includes(t.state)) break
 			if (p.role === "scout" && (t.state === "queued" || t.state === "scouting")) {
 				retry(t, "scout finished without scoring")
@@ -302,13 +307,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				.sort((a, b) => b.p - a.p)
 			const pick = candidates[0]?.t
 			if (!pick) continue
-			const from = freedFrom.get(slotId)
+			const from = movedFrom.get(slotId)
 			s.topicId = pick.id
 			s.assignedAt = now
 			pick.assigned_agents = [...(pick.assigned_agents ?? []), slotId]
 			pick.priority = candidates[0]!.p
 			if (pick.state === "queued") setState(pick, "scouting", "scout assigned")
-			if (from && from !== pick.id) {
+			if (from && from !== pick.id && preempted.has(slotId)) {
 				s.reassignments++
 				pick.reassignment_count = (pick.reassignment_count ?? 0) + 1
 			}

@@ -29,10 +29,10 @@ test("low-relevance topic is dropped within one scout cycle and its slot is reas
 	const re = assigns(a)[0]!
 	assert.equal(re.slotId, "s1")
 	assert.equal(re.topicId, "t_2")
-	assert.equal(re.fromTopicId, "t_1") // visible reassignment: dropped topic -> next topic
+	assert.equal(re.fromTopicId, "t_1") // visible on the dashboard: dropped topic -> next topic
 	assert.equal(b.slots.get("s1")!.topicId, "t_2")
-	assert.equal(b.slots.get("s1")!.reassignments, 1)
-	assert.equal(b.topics.get("t_2")!.reassignment_count, 1)
+	assert.equal(b.slots.get("s1")!.reassignments, 0) // but the scout finished its job; not counted against it
+	assert.equal(b.topics.get("t_2")!.reassignment_count ?? 0, 0)
 })
 
 test("gate: shallow vs deep, and roles needed per state", () => {
@@ -127,20 +127,27 @@ test("research gap marks the topic research_incomplete and frees the slot", () =
 	assert.equal(assigns(a).length, 0) // t_2 is still queued; the collector has nothing to do yet
 })
 
-test("anti-thrash: reassignment request honours dwell time and max reassignments", () => {
-	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout" })
+test("anti-thrash: reassignment request honours dwell time; only mid-work moves count toward the max", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector" })
 	const dwell = { ...defaultConfig, minDwellMs: 1000, maxReassignments: 1 }
 	allocate(b, { type: EV.TopicApproved, payload: {} }, dwell, 0)
 	allocate(b, { type: EV.ReassignmentRequested, payload: { slotId: "s1", topicId: "t_1", reason: "stuck" } }, dwell, 500)
 	assert.equal(b.slots.get("s1")!.topicId, "t_1") // too early
 	allocate(b, { type: EV.ReassignmentRequested, payload: { slotId: "s1", topicId: "t_1", reason: "stuck" } }, dwell, 1500)
-	assert.equal(b.slots.get("s1")!.topicId, "t_1") // freed and immediately re-picked: t_1 is still the best scout target
+	assert.equal(b.slots.get("s1")!.topicId, "t_1") // freed and immediately re-picked: same topic, not counted
+	assert.equal(b.slots.get("s1")!.reassignments, 0)
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, dwell, 1600)
-	assert.equal(b.slots.get("s1")!.topicId, "t_2")
-	assert.equal(b.slots.get("s1")!.reassignments, 1)
-	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1700)
-	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1800)
-	assert.equal(b.slots.get("s1")!.topicId, null) // t_1 dropped; slot at max reassignments is retired
+	assert.equal(b.slots.get("s1")!.topicId, "t_2") // scout moves on after scoring: normal work
+	assert.equal(b.slots.get("c1")!.topicId, "t_1")
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.9, rationale: "" } }, dwell, 1700)
+	assert.equal(b.slots.get("s1")!.reassignments, 0)
+	// t_1 is dropped on new evidence while the collector works on it: that is a real reassignment.
+	const a = allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.9, rationale: "" } }, dwell, 1800)
+	assert.deepEqual(assigns(a).map((x) => [x.slotId, x.topicId, x.fromTopicId]), [["c1", "t_2", "t_1"]])
+	assert.equal(b.slots.get("c1")!.reassignments, 1)
+	assert.equal(b.topics.get("t_2")!.reassignment_count, 1)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1900)
+	assert.equal(b.slots.get("c1")!.topicId, null) // t_2 dropped; collector at max reassignments stays retired
 })
 
 test("a late task.finished for a topic the slot already left does not free the new assignment", () => {
@@ -224,4 +231,17 @@ test("a research gap keeps a topic that already has findings, and ends one that 
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 3)
 	allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_2", slotId: "c1", reason: "provider outage" } }, cfg, 4)
 	assert.equal(b.topics.get("t_2")!.state, "research_incomplete")
+})
+
+test("a scout working through many topics is never retired", () => {
+	const b = board(Array.from({ length: 12 }, (_, i) => ({ id: `t_${i}` })), { s1: "scout" })
+	const c = { ...cfg, maxReassignments: 3 }
+	allocate(b, { type: EV.TopicApproved, payload: {} }, c, 0)
+	for (let i = 1; i <= 12; i++) {
+		const id = b.slots.get("s1")!.topicId!
+		allocate(b, { type: EV.TopicScored, payload: { topicId: id, relevance: 0.9, impact: 0.2, rationale: "" } }, c, i)
+		allocate(b, { type: EV.TaskFinished, payload: { topicId: id, slotId: "s1", role: "scout", outcome: "done" } }, c, i)
+	}
+	assert.equal(b.slots.get("s1")!.reassignments, 0)
+	assert.equal([...b.topics.values()].filter((t) => t.state === "shallow").length, 12)
 })
