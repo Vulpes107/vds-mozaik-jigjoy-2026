@@ -20,6 +20,7 @@ test("usd pricing", () => {
 	assert.equal(usdFor("claude-haiku-4-5", 1_000_000, 0), 1)
 	assert.equal(usdFor("claude-sonnet-4-6", 0, 1_000_000), 15)
 	assert.equal(usdFor("mystery", 1_000_000, 0), 3)
+	assert.equal(usdFor("claude-haiku-4-5", 0, 0, 1_000_000), 1) // cached tokens count as input
 })
 
 test("meter turns inference usage into spend the allocator books against the run budget", async () => {
@@ -41,12 +42,12 @@ test("meter turns inference usage into spend the allocator books against the run
 	join(fakeAgent)
 	const id = fakeAgent.getId()
 	sendEvent(SemanticEvent.create("inference.started", id, { loopId: "L1", model: "claude-sonnet-4-6" }), id)
-	sendEvent(SemanticEvent.create("inference.completed", id, { loopId: "L1", tokenUsage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 } }), id)
+	sendEvent(SemanticEvent.create("inference.completed", id, { loopId: "L1", tokenUsage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, inputTokenDetails: { cached_tokens: 2000 } } }), id)
 	await tick()
 	assert.equal(spends.length, 1)
 	assert.equal(spends[0]!.model, "claude-sonnet-4-6")
-	assert.equal(spends[0]!.tokens, 1500)
-	assert.equal(state.spent.tokens, 1500)
-	assert.ok(Math.abs(state.spent.usd - 0.0105) < 1e-9)
-	assert.deepEqual(seen, [EV.BudgetExhausted]) // 0.0105 >= 0.01
+	assert.equal(spends[0]!.tokens, 3500) // 1000 in + 500 out + 2000 cached
+	assert.equal(state.spent.tokens, 3500)
+	assert.ok(Math.abs(state.spent.usd - 0.0165) < 1e-9) // (1000+2000)*3 + 500*15 per million
+	assert.deepEqual(seen, [EV.BudgetExhausted]) // 0.0165 >= 0.01
 })

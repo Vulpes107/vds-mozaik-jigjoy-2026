@@ -10,9 +10,10 @@ const PRICES: Record<string, { in: number; out: number }> = {
 	"claude-haiku-4-5": { in: 1, out: 5 },
 }
 
-export function usdFor(model: string, inputTokens: number, outputTokens: number): number {
+/** Cached prompt tokens are billed as input here (conservative: cache reads are cheaper, writes dearer, the gateway's rate is unknown). */
+export function usdFor(model: string, inputTokens: number, outputTokens: number, cachedTokens = 0): number {
 	const p = PRICES[model] ?? { in: 3, out: 15 } // unknown model: assume Sonnet pricing rather than free
-	return (inputTokens * p.in + outputTokens * p.out) / 1e6
+	return ((inputTokens + cachedTokens) * p.in + outputTokens * p.out) / 1e6
 }
 
 class WhenInference extends SituationSpecification {
@@ -31,15 +32,17 @@ export function makeMeter() {
 				specification: new WhenInference(),
 				processor: {
 					apply: ({ event, participant }) => {
-						const p = event.payload as { loopId?: string; model?: string; tokenUsage?: { inputTokens: number; outputTokens: number } }
+						// Anthropic reports cached prompt tokens separately; Mozaik keeps them out of inputTokens, so add them back.
+						const p = event.payload as { loopId?: string; model?: string; tokenUsage?: { inputTokens: number; outputTokens: number; inputTokenDetails?: { cached_tokens?: number } } }
 						if (event.type === "inference.started") {
 							if (p.loopId && p.model) modelByLoop.set(p.loopId, p.model)
 							return
 						}
 						const model = modelByLoop.get(p.loopId ?? "") ?? "unknown"
-						const tokens = (p.tokenUsage?.inputTokens ?? 0) + (p.tokenUsage?.outputTokens ?? 0)
+						const cached = p.tokenUsage?.inputTokenDetails?.cached_tokens ?? 0
+						const tokens = (p.tokenUsage?.inputTokens ?? 0) + (p.tokenUsage?.outputTokens ?? 0) + cached
 						if (!tokens) return
-						const payload: SpendRecordedPayload = { agentId: event.producerId, model, tokens, usd: usdFor(model, p.tokenUsage!.inputTokens, p.tokenUsage!.outputTokens) }
+						const payload: SpendRecordedPayload = { agentId: event.producerId, model, tokens, usd: usdFor(model, p.tokenUsage!.inputTokens, p.tokenUsage!.outputTokens, cached) }
 						sendEvent(SemanticEvent.create(EV.SpendRecorded, participant.getId(), payload), participant.getId())
 					},
 				},
