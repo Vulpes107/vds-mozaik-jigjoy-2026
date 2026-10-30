@@ -1,7 +1,7 @@
 // Starts one run: runtime, worker slots, the code-only participants, and (unless disabled) the Planner.
 import { SemanticEvent } from "@mozaik-ai/core"
 import { EV, type WorkerRole } from "../shared/events.ts"
-import { join, sendEvent, startRuntime, type Obj, type RunState } from "../shared/runtime.ts"
+import { join, sendEvent, startRuntime, type Budget, type Obj, type RunState } from "../shared/runtime.ts"
 import { validate } from "../shared/validate.ts"
 import { makeAllocator } from "./allocator-participant.ts"
 import { defaultConfig, type AllocatorConfig } from "./allocator.ts"
@@ -21,7 +21,12 @@ export interface RunOptions {
 	planner?: boolean
 	/** Snapshot directory; null disables snapshots (tests). */
 	snapshotDir?: string | null
+	/** Allocator clock period; 0 disables it (tests). */
+	tickMs?: number
 }
+
+/** Applied when the profile sets no run_budget: a run never spends without a cap. */
+export const defaultRunBudget: Budget = { usd: 2, seconds: 1800 }
 
 export const defaultSlots: Record<WorkerRole, number> = { scout: 2, collector: 1, analyst: 2, verifier: 1 }
 
@@ -30,7 +35,7 @@ export function startRun(profile: Obj, opts: RunOptions = {}): RunState {
 	if (err) throw new Error(`invalid CompanyProfile:\n${err}`)
 	const state = startRuntime(opts.runId ?? `r_${Date.now().toString(36)}`)
 	state.profile = profile
-	state.runBudget = (profile.run_budget as RunState["runBudget"]) ?? {}
+	state.runBudget = { ...defaultRunBudget, ...(profile.run_budget as Budget | undefined) }
 	for (const [role, n] of Object.entries({ ...defaultSlots, ...opts.slots }) as [WorkerRole, number][]) {
 		for (let i = 1; i <= n; i++) state.slots.set(`a_${role.slice(0, 2)}${i}`, { role, topicId: null, assignedAt: 0, reassignments: 0 })
 	}
@@ -49,6 +54,8 @@ export function resumeRun(runId: string, opts: RunOptions = {}): RunState {
 	return state
 }
 
+let rejectionHandlerInstalled = false
+
 function joinParticipants(state: RunState, opts: RunOptions) {
 	const cartographer = makeCartographer()
 	join(cartographer)
@@ -64,6 +71,18 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 	join(makeOperator({ autoApprove: opts.autoApprove }))
 	join(makeAllocator(opts.allocator ?? defaultConfig))
 	join(makeMeter())
+	if (opts.tickMs !== 0) {
+		setInterval(() => sendEvent(SemanticEvent.create(EV.AllocatorTick, cartographer.getId(), {}), cartographer.getId()), opts.tickMs ?? 10_000).unref()
+	}
+	// runLoop is fire-and-forget and Mozaik does not catch a failed agent loop; without this one
+	// gateway error would take the whole process (API, SSE, run) down.
+	if (!rejectionHandlerInstalled) {
+		rejectionHandlerInstalled = true
+		process.on("unhandledRejection", (e) => {
+			console.error("agent loop failed:", e)
+			sendEvent(SemanticEvent.create(EV.RunCompleted, cartographer.getId(), { reason: `agent loop failed: ${e instanceof Error ? e.message : String(e)}` }), cartographer.getId())
+		})
+	}
 	if (opts.planner !== false) startPlanner()
 	sendEvent(SemanticEvent.create(EV.RunStarted, cartographer.getId(), { runId: state.runId }), cartographer.getId())
 	return cartographer

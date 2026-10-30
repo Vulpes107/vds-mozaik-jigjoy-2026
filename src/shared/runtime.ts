@@ -23,6 +23,8 @@ export interface Slot {
 /** Shared store every participant reads/writes. Only the owning machine mutates its own collections. */
 export class RunState extends RuntimeState {
 	runId = ""
+	/** ms epoch; the `seconds` budget line is measured from here. */
+	startedAt = Date.now()
 	profile?: Obj
 	/** Owned by Machine A (orchestrator). */
 	topics = new Map<string, Obj>()

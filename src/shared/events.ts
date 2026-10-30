@@ -38,6 +38,8 @@ export const EV = {
 	AssumptionOverridden: "assumption.overridden",
 	/** Meter (A) turns inference.completed token usage into run spend; Allocator is the only writer of RunState.spent. */
 	SpendRecorded: "spend.recorded",
+	/** Periodic clock from the run (A): task timeouts, wall-clock budget, stuck-run detection. */
+	AllocatorTick: "allocator.tick",
 } as const
 
 export type EventType = (typeof EV)[keyof typeof EV]
