@@ -72,6 +72,18 @@ export interface TopicProgressPayload {
 	slotId: string
 	confidence?: number
 	progress?: number
+	/** Cost delta since the last report; Allocator adds it to run and topic spend. */
+	spent?: { tokens?: number; calls?: number; usd?: number; seconds?: number }
+}
+
+export interface TaskFinishedPayload {
+	slotId: string
+	topicId: string
+	role: WorkerRole
+}
+
+export interface SlotIdlePayload {
+	slotId: string
 }
 
 export interface TopicSuggestedPayload {
