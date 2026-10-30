@@ -142,3 +142,60 @@ test("anti-thrash: reassignment request honours dwell time and max reassignments
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1800)
 	assert.equal(b.slots.get("s1")!.topicId, null) // t_1 dropped; slot at max reassignments is retired
 })
+
+test("a late task.finished for a topic the slot already left does not free the new assignment", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }, { id: "t_3" }], { s1: "scout" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 1)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 2)
+	assert.equal(b.slots.get("s1")!.topicId, "t_2") // moved on as soon as t_1 was scored
+	const a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "s1", role: "scout" } }, cfg, 3)
+	assert.equal(b.slots.get("s1")!.topicId, "t_2") // still on t_2, not re-handed to t_3
+	assert.equal(assigns(a).length, 0)
+	assert.equal(b.topics.get("t_1")!.state, "deep")
+})
+
+test("a scout that finishes without scoring gets the topic retried, then research_incomplete", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout" })
+	const c = { ...cfg, maxReassignments: 2 }
+	allocate(b, { type: EV.TopicApproved, payload: {} }, c, 0)
+	for (let i = 1; i <= 2; i++) {
+		allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "s1", role: "scout" } }, c, i)
+		assert.equal(b.topics.get("t_1")!.state, "scouting") // requeued and immediately re-picked
+		assert.equal(b.topics.get("t_1")!.reassignment_count, i)
+	}
+	const a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "s1", role: "scout" } }, c, 3)
+	assert.equal(b.topics.get("t_1")!.state, "research_incomplete")
+	assert.match(b.topics.get("t_1")!.state_reason!, /without scoring; retries exhausted/)
+	const req = a.find((x) => x.type === EV.AnalysisRequested) as Extract<Action, { type: typeof EV.AnalysisRequested }>
+	assert.deepEqual(req.unresolvedTopicIds, ["t_1"])
+})
+
+test("tick: stuck slots time out, wall-clock counts against the budget, unservable topics end the run", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector" }, { seconds: 100 })
+	b.startedAt = 0
+	const c = { ...cfg, taskTimeoutMs: 1000 }
+	allocate(b, { type: EV.TopicApproved, payload: {} }, c, 0)
+	assert.equal(b.slots.get("s1")!.topicId, "t_1")
+	allocate(b, { type: EV.AllocatorTick, payload: {} }, c, 500)
+	assert.equal(b.slots.get("s1")!.topicId, "t_1") // not yet
+	let a = allocate(b, { type: EV.AllocatorTick, payload: {} }, c, 1500)
+	assert.equal(b.topics.get("t_1")!.reassignment_count, 1)
+	assert.ok(a.some((x) => x.type === EV.TopicStateChanged && /timed out/.test(x.reason)))
+	assert.equal(b.slots.get("s1")!.topicId, "t_1") // retried: back on the board, re-picked (still the best scout target)
+	assert.equal(b.spent.seconds, 1)
+
+	// t_2 scored deep needs a verifier, but there is no verifier slot: the next tick ends the wait.
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.1, rationale: "" } }, c, 1600)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.9, rationale: "" } }, c, 1700)
+	assert.equal(b.topics.get("t_2")!.state, "deep")
+	a = allocate(b, { type: EV.AllocatorTick, payload: {} }, c, 1800)
+	assert.equal(b.topics.get("t_2")!.state, "research_incomplete")
+	assert.match(b.topics.get("t_2")!.state_reason!, /no analyst\/verifier slot/)
+	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
+
+	// Wall clock alone exhausts the run.
+	const b2 = board([{ id: "t_1" }], { s1: "scout" }, { seconds: 100 })
+	b2.startedAt = 0
+	a = allocate(b2, { type: EV.AllocatorTick, payload: {} }, c, 100_000)
+	assert.ok(a.some((x) => x.type === EV.BudgetExhausted))
+})

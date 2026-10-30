@@ -38,6 +38,7 @@ export interface Board {
 	slots: Map<string, Slot>
 	runBudget: Budget
 	spent: Required<Budget>
+	startedAt?: number
 }
 
 export interface AllocatorConfig {
@@ -55,6 +56,8 @@ export interface AllocatorConfig {
 	maxReassignments: number
 	/** Fraction of any budget line that triggers budget.warning. */
 	warnAt: number
+	/** A slot busy longer than this (no task.finished) is freed and its topic retried. */
+	taskTimeoutMs: number
 }
 
 export const defaultConfig: AllocatorConfig = {
@@ -67,6 +70,7 @@ export const defaultConfig: AllocatorConfig = {
 	minDwellMs: 30_000,
 	maxReassignments: 5,
 	warnAt: 0.8,
+	taskTimeoutMs: 180_000,
 }
 
 export type Action =
@@ -131,6 +135,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 	const freeAllOn = (topicId: string) => {
 		for (const [id, s] of board.slots) if (s.topicId === topicId) free(id, topicId)
 	}
+	/** Give a topic another go (back to the board) until it has been retried too often. */
+	const retry = (t: Topic, reason: string) => {
+		t.reassignment_count = (t.reassignment_count ?? 0) + 1
+		if (t.reassignment_count > cfg.maxReassignments) setState(t, "research_incomplete", `${reason}; retries exhausted`)
+		else if (t.state === "scouting") setState(t, "queued", `${reason}; retrying`)
+		else t.state_reason = `${reason}; retrying`
+	}
 
 	switch (event.type) {
 		case EV.TopicScored: {
@@ -160,8 +171,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		case EV.TaskFinished: {
 			const p = event.payload as TaskFinishedPayload
 			const t = topic(p.topicId)
-			free(p.slotId, p.topicId)
+			// A late finish for a topic this slot already left must not free the slot's new assignment.
+			if (board.slots.get(p.slotId)?.topicId === p.topicId) free(p.slotId, p.topicId)
 			if (!t || !LIVE.includes(t.state)) break
+			if (p.role === "scout" && (t.state === "queued" || t.state === "scouting")) {
+				retry(t, "scout finished without scoring")
+				break
+			}
 			const done = sc.rolesDone.get(t.id) ?? new Set<WorkerRole>()
 			done.add(p.role)
 			sc.rolesDone.set(t.id, done)
@@ -222,8 +238,26 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			board.spent.usd += p.usd
 			break
 		}
-		case EV.TopicApproved:
+		case EV.AllocatorTick: {
+			if (board.startedAt !== undefined) board.spent.seconds = Math.floor((now - board.startedAt) / 1000)
+			for (const [id, s] of board.slots) {
+				if (s.topicId === null || now - s.assignedAt < cfg.taskTimeoutMs) continue
+				const t = topic(s.topicId)
+				free(id, s.topicId)
+				if (t && LIVE.includes(t.state)) retry(t, `task on ${id} timed out after ${cfg.taskTimeoutMs} ms`)
+			}
+			// A topic whose next role no slot can ever serve would wait forever.
+			const canServe = (role: WorkerRole) => [...board.slots.values()].some((s) => s.role === role && s.reassignments < cfg.maxReassignments)
+			for (const t of board.topics.values()) {
+				if (!LIVE.includes(t.state)) continue
+				const missing = (ROLES_NEEDED[t.state] ?? []).filter((r) => !sc.rolesDone.get(t.id)?.has(r) && !canServe(r))
+				if (missing.length) {
+					setState(t, "research_incomplete", `no ${missing.join("/")} slot available`)
+					freeAllOn(t.id)
+				}
+			}
 			break
+		}
 	}
 
 	// Budgets: hard limits. Exhaustion ends research; the unresolved list goes to the plan.
