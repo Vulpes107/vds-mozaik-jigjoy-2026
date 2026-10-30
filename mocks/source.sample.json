@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "id": "s_001",
+  "run_id": "r_demo1",
+  "url": "https://example.com/pricing",
+  "title": "Example Corp pricing",
+  "publisher": "Example Corp",
+  "retrieved_at": "2026-10-30T10:00:00Z",
+  "tool": "extract",
+  "source_type": "vendor",
+  "reliability": 0.7,
+  "content_ref": "blob://r_demo1/s_001.md",
+  "injection_flagged": false
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/common.schema.json",
+  "title": "Common definitions",
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z]{1,4}_[A-Za-z0-9]+$" },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "isoDate": { "type": "string", "format": "date" },
+    "isoDateTime": { "type": "string", "format": "date-time" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "schemaVersion": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokens": { "type": "integer", "minimum": 0 },
+        "calls": { "type": "integer", "minimum": 0 },
+        "usd": { "type": "number", "minimum": 0 },
+        "seconds": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

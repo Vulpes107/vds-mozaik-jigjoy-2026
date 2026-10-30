@@ -1,0 +1,12 @@
+{
+  "_comment": "Single source of truth for model IDs. Names must exist in supportedModels of @mozaik-ai/core 4.1. Keys come from .env.",
+  "planner": "claude-sonnet-5-5",
+  "scout": "claude-haiku-4-5",
+  "collector": "claude-haiku-4-5",
+  "analyst": "claude-sonnet-5-5",
+  "verifier": "claude-sonnet-5-5",
+  "financial": "claude-sonnet-5-5",
+  "buildbuy": "claude-sonnet-5-5",
+  "redteam": "claude-opus-5-5",
+  "synthesizer": "claude-opus-5-5"
+}

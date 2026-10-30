@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "name": "Demo Logistics d.o.o.",
+  "description": "Regional last-mile delivery company considering software for route optimisation.",
+  "industry": "Logistics",
+  "headcount": 40,
+  "countries": ["RS", "HR", "BA"],
+  "currency": "EUR",
+  "products": [
+    { "name": "Express Delivery", "description": "Same-day parcel delivery", "stage": "mature", "annual_revenue": 1800000, "annual_cost": 1650000 }
+  ],
+  "financials": { "annual_revenue": 1800000, "monthly_burn": 140000, "cash_on_hand": 300000, "investable_budget": 150000 },
+  "goals": ["Improve margin", "Reduce delivery time"],
+  "risk_appetite": "medium",
+  "horizon_years": 3,
+  "notes": "Considering building route optimisation in-house vs buying a SaaS."
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/finding.schema.json",
+  "title": "Finding",
+  "description": "A structured, sourced claim. Written by research (B), consumed by analysis (C) and dashboard (D).",
+  "type": "object",
+  "required": ["schema_version", "id", "run_id", "topic_id", "claim", "type", "source_ids", "confidence", "as_of"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "topic_id": { "$ref": "common.schema.json#/$defs/id" },
+    "claim": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["fact", "estimate", "opinion"] },
+    "value": { "type": ["number", "null"] },
+    "unit": { "type": ["string", "null"], "description": "e.g. EUR, %, users, months." },
+    "as_of": { "$ref": "common.schema.json#/$defs/isoDate" },
+    "region": { "type": "string" },
+    "source_ids": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "confidence": { "$ref": "common.schema.json#/$defs/score" },
+    "verified": { "type": "boolean", "default": false },
+    "verified_by": { "$ref": "common.schema.json#/$defs/id" },
+    "conflicts_with": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "stale": { "type": "boolean", "default": false },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "created_by": { "$ref": "common.schema.json#/$defs/id" },
+    "created_at": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "value": { "type": "number" } }, "required": ["value"] },
+      "then": { "required": ["unit"] }
+    }
+  ]
+}

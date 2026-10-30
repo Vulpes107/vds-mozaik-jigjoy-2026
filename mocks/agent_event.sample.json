@@ -1,0 +1,25 @@
+[
+  {
+    "schema_version": "1.0",
+    "seq": 41,
+    "ts": "2026-10-30T10:05:00Z",
+    "run_id": "r_demo1",
+    "type": "topic_dropped",
+    "agent_id": "a_03",
+    "agent_role": "scout",
+    "topic_id": "t_002",
+    "detail": "Relevance 0.12 below drop threshold 0.3"
+  },
+  {
+    "schema_version": "1.0",
+    "seq": 42,
+    "ts": "2026-10-30T10:05:01Z",
+    "run_id": "r_demo1",
+    "type": "agent_reassigned",
+    "agent_id": "a_03",
+    "agent_role": "collector",
+    "from_topic_id": "t_002",
+    "topic_id": "t_001",
+    "detail": "Highest priority topic (0.255)"
+  }
+]

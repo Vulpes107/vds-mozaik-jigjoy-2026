@@ -1,0 +1,35 @@
+[
+  {
+    "schema_version": "1.0",
+    "id": "t_001",
+    "run_id": "r_demo1",
+    "title": "Competitor pricing for comparable products",
+    "question": "How do the top 5 competitors price comparable offerings?",
+    "category": "pricing",
+    "state": "deep",
+    "importance_prior": 0.8,
+    "relevance": 0.9,
+    "impact": 0.85,
+    "confidence": 0.4,
+    "priority": 0.255,
+    "depends_on": [],
+    "assigned_agents": ["a_01", "a_02"],
+    "proposed_by": "planner",
+    "reassignment_count": 0
+  },
+  {
+    "schema_version": "1.0",
+    "id": "t_002",
+    "run_id": "r_demo1",
+    "title": "Trade show calendar in unrelated region",
+    "category": "channels",
+    "state": "dropped",
+    "state_reason": "Scout found no link to the company's markets (relevance 0.12).",
+    "importance_prior": 0.3,
+    "relevance": 0.12,
+    "impact": 0.1,
+    "assigned_agents": [],
+    "proposed_by": "planner",
+    "reassignment_count": 0
+  }
+]

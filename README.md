@@ -33,3 +33,17 @@ node --env-file=.env your-app.js
 ```
 
 On core 4.x, events flow to Mozaik cloud automatically: a live link prints in the terminal and your agents appear under **Agents**.
+
+## Project: market intelligence swarm
+
+A multi-agent system that researches a company's market and produces a costed business plan, with dynamic agent allocation, built on Mozaik.
+
+- Design and Mozaik mapping: [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
+- Repo rules for every machine (read first): [`CLAUDE.md`](CLAUDE.md)
+- Data contracts: [`contracts/`](contracts/README.md)
+- Who is doing what: [`STATUS.md`](STATUS.md)
+
+```bash
+npm install
+npm run check   # validate fixtures, typecheck, tests
+```
