@@ -2,7 +2,7 @@
 //  - Recomputer: reacts to a dashboard assumption edit and rebuilds scenarios + plan with the engine (no LLM).
 //  - Conductor: on analysis.requested runs the financial -> build-vs-buy -> synthesizer agents in sequence,
 //    with a per-stage timeout, and falls back to a deterministic plan if the synthesizer never produced one.
-import { SemanticEvent, SituationSpecification, createHuman, type Agent, type Participant, type SituationContext } from "@mozaik-ai/core"
+import { ModelMessageItem, SemanticEvent, SituationSpecification, createHuman, type Agent, type InterceptionHandler, type Participant, type SituationContext } from "@mozaik-ai/core"
 import { EV, type AssumptionOverriddenPayload } from "../shared/events.ts"
 import { join, leave, runLoop, sendEvent } from "../shared/runtime.ts"
 import { makeAnalysisAgent, modelFor, STAGES, stagePrompt, type Stage } from "./agents.ts"
@@ -21,6 +21,8 @@ class WhenEvent extends SituationSpecification {
 export interface AnalysisOptions {
 	/** Give up on a stage that has not answered after this long (default 5 minutes). */
 	stageTimeoutMs?: number
+	/** Tokens (input + output + cached, summed over the stage's calls) after which the stage is cut short (default 60k, about $0.20 on Sonnet). */
+	stageTokenCap?: number
 	models?: Partial<Record<Stage, string>>
 	log?: (msg: string) => void
 }
@@ -33,9 +35,16 @@ export interface AnalysisParticipants {
 export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions = {}): AnalysisParticipants {
 	const log = opts.log ?? ((m: string) => console.error(`[analysis] ${m}`))
 	const timeoutMs = opts.stageTimeoutMs ?? 5 * 60_000
+	const tokenCap = opts.stageTokenCap ?? 60_000
 	const { state } = session
 
-	let current: { stage: Stage; agent: Agent; timer: NodeJS.Timeout } | null = null
+	let current: { stage: Stage; agent: Agent; timer: NodeJS.Timeout; tokens: number } | null = null
+
+	// Analysis must always produce a plan, even after research exhausted the run budget, so it gets its own cap per stage.
+	const stageCap: InterceptionHandler = {
+		isSatisfiedBy: (t) => (t.nextStateId === "inference" || t.nextStateId === "inference_streaming" || t.nextStateId === "function_call") && !!current && current.tokens >= tokenCap,
+		handle: async () => ({ nextStateId: "model_message", input: { answer: ModelMessageItem.rehydrate({ text: "[stopped: stage token cap reached]" }) } }),
+	}
 	let running = false
 
 	function finish(): void {
@@ -76,14 +85,19 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 		join(agent)
 		const timer = setTimeout(() => advance("timeout"), timeoutMs)
 		timer.unref()
-		current = { stage, agent, timer }
-		runLoop(agent.getId(), stagePrompt(stage, session), {
-			model: modelFor(stage, opts.models),
-			// Required for Anthropic models: Mozaik copies it into max_tokens and the API rejects a missing value.
-			maxOutputTokens: 8000,
-			context: agent.getMemory().getContext(),
-			tools: agent.getTools(),
-		})
+		current = { stage, agent, timer, tokens: 0 }
+		runLoop(
+			agent.getId(),
+			stagePrompt(stage, session),
+			{
+				model: modelFor(stage, opts.models),
+				// Required for Anthropic models: Mozaik copies it into max_tokens and the API rejects a missing value.
+				maxOutputTokens: 8000,
+				context: agent.getMemory().getContext(),
+				tools: agent.getTools(),
+			},
+			stageCap,
+		)
 	}
 
 	const conductor = createHuman({
@@ -98,6 +112,16 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 						running = true
 						delete state.plan // a fresh run must not be mistaken for a finished one by the fallback check
 						start(STAGES[0] as Stage)
+					},
+				},
+			},
+			{
+				specification: new WhenEvent("inference.completed"),
+				processor: {
+					apply({ event }) {
+						if (!current || event.producerId !== current.agent.getId()) return
+						const u = (event.payload as { tokenUsage?: { totalTokens?: number; inputTokenDetails?: { cached_tokens?: number } } }).tokenUsage
+						current.tokens += (u?.totalTokens ?? 0) + (u?.inputTokenDetails?.cached_tokens ?? 0)
 					},
 				},
 			},
