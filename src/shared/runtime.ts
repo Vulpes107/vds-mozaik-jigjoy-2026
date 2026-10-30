@@ -1,6 +1,6 @@
 // The single Mozaik runtime for the whole system. Import the functions from here;
 // never call defineRuntime/initializeRuntime anywhere else (it throws if initialised twice).
-import { defineRuntime, RuntimeState } from "@mozaik-ai/core"
+import { defineRuntime, type InferenceRunnerConfig, RuntimeState } from "@mozaik-ai/core"
 
 /** Contract objects are plain JSON validated against /contracts; typed loosely here until types are generated. */
 export type Obj = Record<string, unknown> & { id: string }
@@ -47,10 +47,10 @@ export class RunState extends RuntimeState {
 export const { initializeRuntime, resolveRuntime, resolveParticipant, join, leave, sendMessage, sendEvent, runLoop } =
 	defineRuntime<RunState>()
 
-/** Call once at process start (or once per test file). */
-export function startRuntime(runId: string): RunState {
+/** Call once at process start (or once per test file). `inferenceRunnerConfig` lets tests inject a fake model. */
+export function startRuntime(runId: string, inferenceRunnerConfig?: InferenceRunnerConfig): RunState {
 	const state = new RunState()
 	state.runId = runId
-	initializeRuntime({ state })
+	initializeRuntime(inferenceRunnerConfig ? { state, inferenceRunnerConfig } : { state })
 	return state
 }
