@@ -28,6 +28,7 @@ Phase 0 — contracts, shared runtime, skeleton
 
 ## Machine C — analysis
 - Done: engine in `src/analysis/engine/` (safe formula evaluator, NPV/IRR/payback/break-even, scenarios with low/base/high = adverse/base/favourable per assumption, tornado + break-even values, build-vs-buy TCO with flip point, option scoring by risk appetite, deterministic red team, `BusinessPlan` assembler); Mozaik layer (`AnalysisSession`, 5 tools, Financial / BuildBuy / Synthesizer agents, `registerAnalysis` conductor + recomputer for `EV.AssumptionOverridden`, no LLM on that path); 38 tests incl. full chain through the real runtime with a scripted fake model; every output validated against `contracts/`.
+- Done (branch `c/max-output-tokens`): `maxOutputTokens` on every stage's `runLoop` (was a 400 on the real gateway); `contracts.ts` is a wrapper over `src/shared/validate.ts`
 - Next: run against a real model + real findings from B; Monte Carlo (optional); golden companies with D.
 - Blockers / asks:
   - **A:** move `ajv` and `ajv-formats` from devDependencies to dependencies (used at runtime by `src/analysis/contracts.ts`).
