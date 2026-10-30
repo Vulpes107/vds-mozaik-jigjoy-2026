@@ -79,7 +79,13 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 		let timer: NodeJS.Timeout | undefined
 		onAgentEvent(() => {
 			clearTimeout(timer)
-			timer = setTimeout(() => writeSnapshot(state, opts.snapshotDir ?? "data"), 200)
+			timer = setTimeout(() => {
+				try {
+					writeSnapshot(state, opts.snapshotDir ?? "data")
+				} catch (e) {
+					console.error(`snapshot of ${state.runId} failed (run continues, resume is not possible): ${String(e)}`) // e.g. a read-only data/mozaik.db
+				}
+			}, 200)
 			timer.unref()
 		})
 	}

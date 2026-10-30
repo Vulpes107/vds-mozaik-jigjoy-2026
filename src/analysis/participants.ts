@@ -21,7 +21,7 @@ class WhenEvent extends SituationSpecification {
 export interface AnalysisOptions {
 	/** Give up on a stage that has not answered after this long (default 5 minutes). */
 	stageTimeoutMs?: number
-	/** Tokens (input + output + cached, summed over the stage's calls) after which the stage is cut short (default 60k, about $0.20 on Sonnet). */
+	/** Tokens (input + output + cached, summed over the stage's calls) after which the stage is cut short (default 150k; the whole context is re-sent every turn, so 60k was reached after ~12 tool calls, before any scenario was computed). */
 	stageTokenCap?: number
 	models?: Partial<Record<Stage, string>>
 	log?: (msg: string) => void
@@ -35,7 +35,7 @@ export interface AnalysisParticipants {
 export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions = {}): AnalysisParticipants {
 	const log = opts.log ?? ((m: string) => console.error(`[analysis] ${m}`))
 	const timeoutMs = opts.stageTimeoutMs ?? 5 * 60_000
-	const tokenCap = opts.stageTokenCap ?? 60_000
+	const tokenCap = opts.stageTokenCap ?? 150_000
 	const { state } = session
 
 	let current: { stage: Stage; agent: Agent; timer: NodeJS.Timeout; tokens: number } | null = null
@@ -43,7 +43,10 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 	// Analysis must always produce a plan, even after research exhausted the run budget, so it gets its own cap per stage.
 	const stageCap: InterceptionHandler = {
 		isSatisfiedBy: (t) => (t.nextStateId === "inference" || t.nextStateId === "inference_streaming" || t.nextStateId === "function_call") && !!current && current.tokens >= tokenCap,
-		handle: async () => ({ nextStateId: "model_message", input: { answer: ModelMessageItem.rehydrate({ text: "[stopped: stage token cap reached]" }) } }),
+		handle: async () => {
+			log(`${current?.stage} stopped: stage token cap (${tokenCap}) reached`)
+			return { nextStateId: "model_message", input: { answer: ModelMessageItem.rehydrate({ text: "[stopped: stage token cap reached]" }) } }
+		},
 	}
 	let running = false
 
@@ -56,6 +59,8 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 				log(`could not assemble a fallback plan: ${(e as Error).message}`)
 			}
 		}
+		// Never leave the run hanging in "analysis": the dashboard needs an end event either way.
+		if (!state.plan) session.emit(EV.RunCompleted, { reason: "analysis produced no plan" })
 	}
 
 	// Mozaik's loop looks its agent up again after publishing each event (to record it in memory), so an agent must stay
@@ -75,6 +80,13 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 			log(`${stage} abandoned (${reason}); agent kept joined until its loop returns`)
 		}
 		log(`${stage} done (${reason})`)
+		if (stage === "financial") {
+			try {
+				if (session.ensureBaseline()) log("financial stage produced no do_nothing scenario; built an illustrative baseline from the company profile")
+			} catch (e) {
+				log(`could not build the baseline scenario: ${(e as Error).message}`)
+			}
+		}
 		const next = STAGES[STAGES.indexOf(stage) + 1]
 		if (next) start(next)
 		else finish()

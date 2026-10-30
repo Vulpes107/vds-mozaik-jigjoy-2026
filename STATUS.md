@@ -13,6 +13,9 @@ Phase 0 — contracts, shared runtime, skeleton
 - For B/C: import `validate` from `src/shared/validate.ts`; pass `budgetInterceptor(topicId)` as 4th arg of `runLoop`; start a run with `startRun(profile, opts)` from `src/orchestrator/run.ts` or `POST /runs`
 - Done (branch `a/integration`): startRun wires B (`startResearch`, Tavily from .env) and C (`registerAnalysis`); allocator honours `task.finished.outcome`, keeps topics with findings on `research.gap`, task timeout 420 s; `POST /runs/{id}/assumptions/{aid}`, `GET assumptions|scenarios`; typed B payload extras; `startRuntime(runId, inferenceRunnerConfig?)`
 - Done (ADR 0002): run snapshots in SQLite (`data/mozaik.db`, `better-sqlite3`, needs Node 22+) instead of per-run JSON files; legacy files still resume; `GET /runs[?project_id=]` lists runs
+- Note (by D, one line in `server.ts`): `GET /runs/{id}` now includes `profile` — the dashboard header and cash curve read it; test added
+- Fix (by D, `allocator.ts` + test): the Allocator filled idle slots on every event, so the clock tick started research (and spent ~$0.9) while `cp_topics` was still pending; slots are now filled only after `EV.TopicApproved`
+- Note (by D, `run.ts`): a failing snapshot write (seen: `SQLITE_READONLY` on a root-owned `data/mozaik.db` created from the devcontainer) no longer crashes the process; it is logged and the run continues without resume
 - Next: live end-to-end run with Tavily + gateway; per-topic `budget` set by planner/allocator; analyst-proposed topics (`topic.suggested`) scored by Planner; clarifying-questions checkpoint for thin profiles
 - Blockers:
 
@@ -32,6 +35,7 @@ Phase 0 — contracts, shared runtime, skeleton
 ## Machine C — analysis
 - Done: engine in `src/analysis/engine/` (safe formula evaluator, NPV/IRR/payback/break-even, scenarios with low/base/high = adverse/base/favourable per assumption, tornado + break-even values, build-vs-buy TCO with flip point, option scoring by risk appetite, deterministic red team, `BusinessPlan` assembler); Mozaik layer (`AnalysisSession`, 5 tools, Financial / BuildBuy / Synthesizer agents, `registerAnalysis` conductor + recomputer for `EV.AssumptionOverridden`, no LLM on that path); 38 tests incl. full chain through the real runtime with a scripted fake model; every output validated against `contracts/`.
 - Done (branch `c/max-output-tokens`): `maxOutputTokens` on every stage's `runLoop` (was a 400 on the real gateway); `contracts.ts` is a wrapper over `src/shared/validate.ts`
+- Fix (by D, after a live run stuck in `analysis`): the 60k stage token cap cut the Financial stage after ~12 tool calls (the context is re-sent every turn), so no `do_nothing` scenario existed, `assemble_plan` failed and no plan or end event was ever emitted. Now: cap 150k and logged when hit; after the Financial stage `session.ensureBaseline()` builds an illustrative `do_nothing` baseline from the profile's `annual_revenue`/`monthly_burn` if the model made none (origin `default`, confidence 0.3); if still no plan, `run.completed` is emitted so the dashboard shows the run stopped. Tests in `session.test.ts`.
 - Next: run against a real model + real findings from B; Monte Carlo (optional); golden companies with D.
 - Blockers / asks:
   - **A:** move `ajv` and `ajv-formats` from devDependencies to dependencies (used at runtime by `src/analysis/contracts.ts`).
@@ -43,5 +47,6 @@ Phase 0 — contracts, shared runtime, skeleton
 - Done: `dashboard/mock-server/server.mjs` — plain-Node REST+SSE server mirroring `src/orchestrator/server.ts`'s shape (ADR 0001) from `mocks/`; replays `agent_event.sample.json` with real timing (`MOCK_SPEED` to compress), applies drop/reassign effects to in-memory topics, supports SSE reconnect via `Last-Event-ID`/`?since=`
 - Done: `e2e/run-demo.mjs` — spawns the mock server (or `--real` against A's server), asserts the topic-dropped -> agent-reassigned hero moment appears on the SSE stream, validates served topics/plan against `contracts/`, checks for leaked API-key-shaped strings
 - Done: `docs/DEMO.md` — 3-minute script + fallback-to-mocks instructions
-- Next: layout of all panels (React UI — being built elsewhere); additional fixtures for conflicting findings, low-confidence run, budget-exhausted partial plan, injection-flagged source, 2 more golden companies (SaaS, manufacturing); failure-injection cases in e2e (Tavily outage, malformed finding, killed process)
+- Done: dashboard wired to A's real API — Vite dev server proxies `/runs` to :8787 (no cross-origin calls), run id resolved from `GET /runs` when no `?run=`, empty state has a CompanyProfile intake form (`POST /runs`, reload on the new id), mock server answers `GET /runs`; verified in the devcontainer against `src/orchestrator/server.ts` with planner/research off (list, start, summary, 409, SSE)
+- Next: full LLM run through the UI; additional fixtures for conflicting findings, low-confidence run, budget-exhausted partial plan, injection-flagged source, 2 more golden companies (SaaS, manufacturing); failure-injection cases in e2e (Tavily outage, malformed finding, killed process)
 - Blockers:

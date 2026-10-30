@@ -245,3 +245,11 @@ test("a scout working through many topics is never retired", () => {
 	assert.equal(b.slots.get("s1")!.reassignments, 0)
 	assert.equal([...b.topics.values()].filter((t) => t.state === "shallow").length, 12)
 })
+
+test("nothing is assigned before the human approves the topic list (a tick or spend event must not start research)", () => {
+	const b = board([{ id: "t_1", importance_prior: 0.9 }], { s1: "scout" })
+	assert.equal(assigns(allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, 1000)).length, 0)
+	assert.equal(assigns(allocate(b, { type: EV.SpendRecorded, payload: { tokens: 10, usd: 0.001 } }, cfg, 1000)).length, 0)
+	assert.equal(b.topics.get("t_1")!.state, "queued")
+	assert.equal(assigns(allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 2000)).length, 1)
+})

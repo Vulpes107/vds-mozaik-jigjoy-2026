@@ -19,6 +19,10 @@ Golden company: `mocks/company_profile.sample.json` (Demo Logistics d.o.o., run 
 node dashboard/mock-server/server.mjs            # http://localhost:8787, PORT env to override
 MOCK_SPEED=200 node dashboard/mock-server/server.mjs   # compress the replay for a quick look
 
+# Real run (devcontainer, keys in .env): API on :8787, dashboard proxies /runs to it
+node --env-file=.env --import tsx src/orchestrator/server.ts
+cd dashboard && npm run dev        # http://localhost:5173 -> intake form -> Start run
+
 # E2E check (spawns the mock server itself, exits non-zero on breakage)
 node e2e/run-demo.mjs
 node e2e/run-demo.mjs --real   # against A's real server already running on PORT
