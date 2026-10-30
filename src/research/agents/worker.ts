@@ -4,7 +4,8 @@
 // leaves. A reassignment mid-task stops the old agent at its next loop transition and starts a fresh one.
 import { Agent, type Human, ModelMessageItem, SituationSpecification, createHuman, type InterceptionHandler, type SituationContext } from "@mozaik-ai/core"
 import { EV, type TaskAssignedPayload, type TopicProgressPayload } from "../../shared/events.ts"
-import { join, leave, runLoop } from "../../shared/runtime.ts"
+import { join, leave, runLoop, type RunState } from "../../shared/runtime.ts"
+import { exhaustedLine } from "../../orchestrator/budget.ts"
 import { taskPrompt, type TaskLimits } from "../prompts.ts"
 import { TaskScope } from "../task.ts"
 import type { TaskFinishedPayload } from "../types.ts"
@@ -16,7 +17,7 @@ import { makeVerifier } from "./verifier.ts"
 
 export const FACTORIES = { scout: makeScout, collector: makeCollector, analyst: makeAnalyst, verifier: makeVerifier } as const
 
-type StopReason = "tokens" | "tool_calls" | "timeout" | "cancelled"
+type StopReason = "tokens" | "tool_calls" | "timeout" | "cancelled" | "run_budget"
 
 export class TaskRun {
 	finished = false
@@ -32,11 +33,14 @@ export class TaskRun {
 		readonly agent: Agent,
 		readonly scope: TaskScope,
 		readonly limits: TaskLimits,
+		/** Run-level budget (A); when any line is exhausted the task ends at its next step, not at its own limit. */
+		readonly run?: Pick<RunState, "spent" | "runBudget">,
 	) {}
 
 	reason(): StopReason | undefined {
 		if (this.stop) return this.stop
 		if (this.tokens >= this.limits.maxTokens) return "tokens"
+		if (this.run && exhaustedLine(this.run.spent, this.run.runBudget)) return "run_budget"
 		return undefined
 	}
 }
@@ -184,9 +188,10 @@ export function createSlotWorker(slotId: string, deps: ResearchDeps): Human {
 				specification: when((c) => c.event.type === "inference.completed" && !!mine(c)),
 				processor: {
 					apply(c) {
-						const usage = (c.event.payload as { tokenUsage?: { totalTokens?: number } } | undefined)?.tokenUsage
+						// Anthropic reports cached prompt tokens outside totalTokens; they are billed too.
+						const usage = (c.event.payload as { tokenUsage?: { totalTokens?: number; inputTokenDetails?: { cached_tokens?: number } } } | undefined)?.tokenUsage
 						const run = mine(c)
-						if (run && typeof usage?.totalTokens === "number") run.tokens += usage.totalTokens
+						if (run && typeof usage?.totalTokens === "number") run.tokens += usage.totalTokens + (usage.inputTokenDetails?.cached_tokens ?? 0)
 					},
 				},
 			},
