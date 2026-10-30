@@ -12,9 +12,19 @@ export interface Budget {
 	seconds?: number
 }
 
+export interface Slot {
+	role: "scout" | "collector" | "analyst" | "verifier"
+	topicId: string | null
+	/** ms epoch of the current assignment (anti-thrash dwell time). */
+	assignedAt: number
+	reassignments: number
+}
+
 /** Shared store every participant reads/writes. Only the owning machine mutates its own collections. */
 export class RunState extends RuntimeState {
 	runId = ""
+	/** ms epoch; the `seconds` budget line is measured from here. */
+	startedAt = Date.now()
 	profile?: Obj
 	/** Owned by Machine A (orchestrator). */
 	topics = new Map<string, Obj>()
@@ -25,8 +35,11 @@ export class RunState extends RuntimeState {
 	assumptions = new Map<string, Obj>()
 	scenarios = new Map<string, Obj>()
 	plan?: Obj
-	/** slotId -> topicId currently worked; Allocator is the only writer. */
-	slots = new Map<string, string | null>()
+	/** Worker slots; Allocator is the only writer. Slot ids are stable, agents are disposable. */
+	slots = new Map<string, Slot>()
+	/** Owned by Machine A: Cartographer's AgentEvent log (SSE replay) and Operator's human checkpoints. */
+	agentEvents: Obj[] = []
+	checkpoints = new Map<string, Obj>()
 	runBudget: Budget = {}
 	spent: Required<Budget> = { tokens: 0, calls: 0, usd: 0, seconds: 0 }
 }

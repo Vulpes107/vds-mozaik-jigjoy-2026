@@ -36,6 +36,10 @@ export const EV = {
 	ReassignmentRequested: "reassignment.requested",
 	/** Dashboard edit (via A's API) of Assumption.user_override; analysis (C) recomputes without an LLM. */
 	AssumptionOverridden: "assumption.overridden",
+	/** Meter (A) turns inference.completed token usage into run spend; Allocator is the only writer of RunState.spent. */
+	SpendRecorded: "spend.recorded",
+	/** Periodic clock from the run (A): task timeouts, wall-clock budget, stuck-run detection. */
+	AllocatorTick: "allocator.tick",
 } as const
 
 export type EventType = (typeof EV)[keyof typeof EV]
@@ -72,6 +76,18 @@ export interface TopicProgressPayload {
 	slotId: string
 	confidence?: number
 	progress?: number
+	/** Cost delta since the last report; Allocator adds it to run and topic spend. */
+	spent?: { tokens?: number; calls?: number; usd?: number; seconds?: number }
+}
+
+export interface TaskFinishedPayload {
+	slotId: string
+	topicId: string
+	role: WorkerRole
+}
+
+export interface SlotIdlePayload {
+	slotId: string
 }
 
 export interface TopicSuggestedPayload {
@@ -99,6 +115,13 @@ export interface AssumptionOverriddenPayload {
 	assumptionId: string
 	/** null clears the override. */
 	value: number | null
+}
+
+export interface SpendRecordedPayload {
+	agentId: string
+	model: string
+	tokens: number
+	usd: number
 }
 
 export interface IdPayload {
