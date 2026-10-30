@@ -3,7 +3,7 @@
 // role (clean context + handoff note), runs the loop under hard limits, and on completion sends EV.TaskFinished and
 // leaves. A reassignment mid-task stops the old agent at its next loop transition and starts a fresh one.
 import { Agent, type Human, ModelMessageItem, SituationSpecification, createHuman, type InterceptionHandler, type SituationContext } from "@mozaik-ai/core"
-import { EV, type TaskAssignedPayload } from "../../shared/events.ts"
+import { EV, type TaskAssignedPayload, type TopicProgressPayload } from "../../shared/events.ts"
 import { join, leave, runLoop } from "../../shared/runtime.ts"
 import { taskPrompt, type TaskLimits } from "../prompts.ts"
 import { TaskScope } from "../task.ts"
@@ -98,9 +98,12 @@ export function createSlotWorker(slotId: string, deps: ResearchDeps): Human {
 		if (run.timer) clearTimeout(run.timer)
 		setTimeout(() => retire(run), RETIRE_FALLBACK_MS).unref?.()
 		if (current === run) current = undefined
+		const c = run.scope.counters
+		// Provider calls this task made, so the orchestrator's run spend (and the dashboard) see them.
+		const calls = c.searches + c.fetches
+		if (calls) deps.emitter.emit(EV.TopicProgress, { topicId: run.scope.topicId, slotId, spent: { calls } } satisfies TopicProgressPayload)
 		if (run.superseded) return // the Allocator reassigned this slot; it does not expect a TaskFinished for the old task
 
-		const c = run.scope.counters
 		const empty =
 			(run.scope.role === "scout" && c.scoresReported === 0) ||
 			(run.scope.role === "collector" && c.sources === 0) ||
