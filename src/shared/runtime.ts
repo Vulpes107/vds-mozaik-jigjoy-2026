@@ -35,6 +35,9 @@ export class RunState extends RuntimeState {
 	plan?: Obj
 	/** Worker slots; Allocator is the only writer. Slot ids are stable, agents are disposable. */
 	slots = new Map<string, Slot>()
+	/** Owned by Machine A: Cartographer's AgentEvent log (SSE replay) and Operator's human checkpoints. */
+	agentEvents: Obj[] = []
+	checkpoints = new Map<string, Obj>()
 	runBudget: Budget = {}
 	spent: Required<Budget> = { tokens: 0, calls: 0, usd: 0, seconds: 0 }
 }
