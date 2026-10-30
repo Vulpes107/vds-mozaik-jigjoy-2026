@@ -312,7 +312,7 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				s.reassignments++
 				pick.reassignment_count = (pick.reassignment_count ?? 0) + 1
 			}
-			out.push({ type: EV.TaskAssigned, slotId, role: s.role, topicId: pick.id, fromTopicId: from, handoff: pick.state_reason })
+			out.push({ type: EV.TaskAssigned, slotId, role: s.role, topicId: pick.id, fromTopicId: from, handoff: pick.state_reason?.slice(0, 200) })
 		}
 	}
 

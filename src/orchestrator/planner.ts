@@ -1,4 +1,4 @@
-// Topic Planner: turns the CompanyProfile into 15–40 scored topics on the task board.
+// Topic Planner: turns the CompanyProfile into a short list of scored topics on the task board.
 // The model never writes RunState directly; it calls submit_topics, which validates and stores.
 import { readFileSync } from "node:fs"
 import { SemanticEvent, SituationSpecification, createAgent, type SituationContext, type Tool } from "@mozaik-ai/core"
@@ -13,11 +13,13 @@ export const CATEGORIES = [
 	"funding", "channels", "macro", "brand", "esg", "ip", "existing_solutions", "cyber_ops",
 ] as const
 
-export const MAX_TOPICS = 40
+// Sized for the hackathon budget: scouting alone costs ~1-2 cents per topic, deep work far more.
+export const MIN_TOPICS = 10
+export const MAX_TOPICS = 15
 
 const INSTRUCTION = `You are the Topic Planner of a market-intelligence system. Given a company profile, produce the research agenda:
-15 to ${MAX_TOPICS} topics, each a concrete question whose answer could change the company's plan.
-Cover every category in [${CATEGORIES.join(", ")}] or list it in skipped_categories with a one-line reason.
+${MIN_TOPICS} to ${MAX_TOPICS} topics, each a concrete question whose answer could change the company's plan.
+Cover each category in [${CATEGORIES.join(", ")}] that matters for this company; list every other category in skipped_categories with a one-line reason. Prefer fewer, sharper topics.
 Merge overlapping topics. For multi-product profiles set product_scope per topic; leave it empty for company-wide topics.
 importance_prior is your 0–1 estimate of how much the plan depends on this topic. Use depends_on only for real prerequisites.
 Call submit_topics exactly once with the full list. If it returns validation errors, fix them and call it again.
@@ -92,7 +94,8 @@ export function makeSubmitTopics(producerId: () => string): Tool {
 			const covered = new Set(list.map((t) => t.category))
 			const skipped = new Set((args.skipped_categories ?? []).map((s) => s.category))
 			for (const c of CATEGORIES) if (!covered.has(c) && !skipped.has(c)) errors.push(`category '${c}' is neither covered nor in skipped_categories`)
-			if (list.length < 15) errors.push(`only ${list.length} topics; produce at least 15`)
+			if (list.length < MIN_TOPICS) errors.push(`only ${list.length} topics; produce at least ${MIN_TOPICS}`)
+			if ((args.topics ?? []).length > MAX_TOPICS) errors.push(`${args.topics.length} topics; at most ${MAX_TOPICS}, merge or drop the weakest`)
 			if (errors.length) return { status: "invalid", errors }
 
 			state.topics.clear()
