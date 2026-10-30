@@ -1,0 +1,8 @@
+{
+  "name": "vds-mozaik-jigjoy-2026",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mozaik-ai/core": "~4.1.0"
+  }
+}

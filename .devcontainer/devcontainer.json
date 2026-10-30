@@ -1,0 +1,12 @@
+{
+  "name": "Mozaik 4.1",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "postCreateCommand": "npm install",
+  // Pass host keys through if set; otherwise run `npx @mozaik-ai/cloud-sdk pair` or use .env
+  "remoteEnv": {
+    "MOZAIK_API_KEY": "${localEnv:MOZAIK_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}"
+  }
+}
