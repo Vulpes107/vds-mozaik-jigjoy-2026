@@ -39,3 +39,27 @@ Golden numeric tests for NPV/IRR/payback (hand-checked), TCO flip-point test, se
 - Use structured output (`InferenceInput.structuredOutput`) for the `BusinessPlan`, then validate with Ajv before emitting `EV.PlanReady`.
 - Recompute path for the dashboard's assumption editor must not call an LLM: engine only. It is triggered by `EV.AssumptionOverridden`.
 - Fixtures to develop against: `mocks/assumption.sample.json`, `mocks/scenario.sample.json`, `mocks/business_plan.sample.json`.
+
+## Status and wiring (C)
+```ts
+const state = startRuntime("r_xxx")          // A: src/shared/runtime.ts (fill state.profile / findings / topics first)
+const session = new AnalysisSession(state)
+registerAnalysis(session)                    // joins the Conductor and the Recomputer
+sendEvent(SemanticEvent.create(EV.AnalysisRequested, joinedId, {}), joinedId)   // runs financial -> buildbuy -> synthesizer
+// result: state.assumptions / state.scenarios / state.plan; events scenario.computed + plan.ready
+```
+- Dashboard edit: send `EV.AssumptionOverridden { assumptionId, value | null }`; scenarios and plan are rebuilt by the engine only (no LLM, < 1 s).
+- Scenario specs use formulas over assumption ids (`as_001 * as_002 * (1 + as_003) ^ (year - 1)`); parsed by a safe evaluator, never `eval`. "low"/"high" cases mean adverse/favourable per assumption (cost drivers are inverted automatically).
+- `npm test` includes `analysis.flow.test.ts` (scripted fake model, real runtime) and `analysis.timeout.test.ts` (hung model -> fallback plan).
+
+## Mozaik gotchas learned (read before touching participants)
+1. **The loop runs only the first function call of each model turn**; parallel calls are dropped. Agent prompts say "one tool per turn".
+2. **Never `leave()` an agent while its loop may still publish.** The loop re-resolves its agent after every event; leaving inside a `model.answer` handler throws. Leave on the next tick (`setImmediate`), and never leave a hung agent.
+3. Tools signal errors by throwing; Mozaik hands the message to the model as `Error calling tool: ...`. Keep messages fixable.
+4. Fan-out is not awaited and runs synchronously per consumer: handlers must be idempotent and must not throw.
+
+## Known limits
+- Prose supplied by the model (executive summary, recommendations) is validated for finding ids but **not** scanned for invented numbers; the prompts forbid them and the plan appends the computed figures.
+- Option scores and risk likelihood/severity are heuristics; labelled as such in the output.
+- IRR uses one bracketed root; indicative when cash flows change sign repeatedly.
+- Not yet exercised against a live model (no API keys in CI); the fake-model tests prove the wiring, not prompt quality.

@@ -27,9 +27,12 @@ Phase 0 — contracts, shared runtime, skeleton
 - Blockers:
 
 ## Machine C — analysis
-- Done:
-- Next: financial engine + golden numeric tests against mock assumptions
-- Blockers:
+- Done: engine in `src/analysis/engine/` (safe formula evaluator, NPV/IRR/payback/break-even, scenarios with low/base/high = adverse/base/favourable per assumption, tornado + break-even values, build-vs-buy TCO with flip point, option scoring by risk appetite, deterministic red team, `BusinessPlan` assembler); Mozaik layer (`AnalysisSession`, 5 tools, Financial / BuildBuy / Synthesizer agents, `registerAnalysis` conductor + recomputer for `EV.AssumptionOverridden`, no LLM on that path); 38 tests incl. full chain through the real runtime with a scripted fake model; every output validated against `contracts/`.
+- Next: run against a real model + real findings from B; Monte Carlo (optional); golden companies with D.
+- Blockers / asks:
+  - **A:** move `ajv` and `ajv-formats` from devDependencies to dependencies (used at runtime by `src/analysis/contracts.ts`).
+  - **A:** install a process-level `unhandledRejection` handler in the app entry: a failing model call rejects inside Mozaik's detached loop.
+  - **A/B:** to start analysis send `EV.AnalysisRequested` from any joined participant after research; `RunState.profile/findings/topics` must be populated first.
 
 ## Machine D — dashboard / mocks / e2e
 - Done: seed fixtures in `mocks/`; added assumption, scenario, business_plan and topic.research_incomplete fixtures
