@@ -20,6 +20,7 @@ Need a change in someone else's path? Open an issue/PR comment addressed to the 
 - **Coordination by events, not orchestration.** Custom events are listed in `src/shared/events.ts` (`EV.*`) and sent with `sendEvent(SemanticEvent.create(type, producerId, payload), producerId)`. Add new event types there (additive).
 - **Handlers** = a `SituationSpecification` ("when") + `SituationProcessor` ("then"). Filter on `event.type`, and on `event.producerId` vs `participant.getId()`.
 - **Never `await` `runLoop` or `sendMessage`** inside a processor; they are fire-and-forget and return `void`.
+- **Always pass `maxOutputTokens` in the `runLoop` inference input for Anthropic models**; without it the API fails with 400 `max_tokens: Field required`.
 - **Shared data** lives on `RunState` (`src/shared/runtime.ts`); only the owning machine writes its own collections.
 - **Dynamic reassignment** = the Allocator emits `task.assigned` for a worker *slot*; the worker creates a fresh Agent for that task (clean context, short `handoff` note) and the old one `leave()`s. Slot ids are stable, agents are disposable.
 - Models are chosen only via `config/models.json` (names must exist in `supportedModels`).
