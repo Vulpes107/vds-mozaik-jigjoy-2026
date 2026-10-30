@@ -12,7 +12,7 @@ One live page that shows everything: research progress, agent allocation, findin
 `AgentEvent` (SSE), `Topic`, `Finding`, `Source`, `Scenario`, `Assumption`, `BusinessPlan` via A's REST/SSE API. Until A exists, serve `mocks/` through a tiny mock server (`dashboard/mock-server/`) with a scripted event replay.
 
 ## Stack
-React + TypeScript + Vite. Types generated from `contracts/` (see `contracts/README.md`), committed under `dashboard/src/types/`, never hand-edited. Charts: Recharts or similar. Must work on a laptop screen and a projector.
+React + TypeScript + Vite, with its own `dashboard/package.json` and lockfile (never add dependencies to the root `package.json`; that is A's). Types generated from `contracts/` (see `contracts/README.md`), committed under `dashboard/src/types/`, never hand-edited. Charts: Recharts or similar. Must work on a laptop screen and a projector.
 
 ## Panels (single page)
 1. Header: company, run status, budget used, ETA.

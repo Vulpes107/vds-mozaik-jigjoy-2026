@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "run_id": "r_demo1",
+  "generated_at": "2026-10-30T12:00:00Z",
+  "overall_confidence": 0.55,
+  "executive_summary": "Liquidity first: the Expand case breaches runway in year 1 without staged funding. Recommend a staged expansion gated on pilot traction.",
+  "recommendations": [
+    {
+      "rank": 1,
+      "title": "Stage the expansion in two tranches",
+      "rationale": "Keeps the move reversible and caps downside to the first tranche.",
+      "category": "finance",
+      "confidence": 0.6,
+      "finding_ids": ["f_001"],
+      "scenario_ids": ["sc_2"],
+      "what_would_change_this": "Churn above 10%/yr makes Do nothing the better option."
+    }
+  ],
+  "scenario_ids": ["sc_1", "sc_2"],
+  "chosen_scenario_id": "sc_2",
+  "decisions": {
+    "continue_vs_change": {
+      "verdict": "expand",
+      "scores": { "continue": 0.4, "optimise": 0.55, "expand": 0.65, "pivot": 0.2, "exit": 0.1 },
+      "rationale": "Market growth outweighs runway risk if staged."
+    },
+    "investment": { "currency": "EUR", "low": 300000, "base": 400000, "high": 550000, "staged": true },
+    "build_vs_buy": [
+      {
+        "capability": "Billing",
+        "verdict": "buy",
+        "tco_build": 260000,
+        "tco_buy": 140000,
+        "horizon_years": 3,
+        "flip_point": "Build wins above ~40k invoices/month.",
+        "candidate_vendors": ["Vendor A", "Vendor B"],
+        "finding_ids": ["f_001"]
+      }
+    ]
+  },
+  "risks": [
+    { "id": "rk_1", "title": "Cash runway shorter than payback", "category": "liquidity", "likelihood": 0.5, "severity": 0.8, "mitigation": "Second tranche only after month-6 gate.", "finding_ids": [] }
+  ],
+  "roadmap": [
+    { "month": 0, "milestone": "Tranche 1 released", "gate": false },
+    { "month": 6, "milestone": "Pilot review", "gate": true, "kill_criteria": ["Fewer than 20 paying pilots"] }
+  ],
+  "assumption_ids": ["as_001", "as_002"],
+  "unresolved_topic_ids": ["t_003"],
+  "dropped_topic_ids": ["t_002"],
+  "disclaimer": "Not legal, tax or financial advice. Figures are estimates with stated ranges."
+}

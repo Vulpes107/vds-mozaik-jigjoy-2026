@@ -37,4 +37,5 @@ Golden numeric tests for NPV/IRR/payback (hand-checked), TCO flip-point test, se
 - Pure TypeScript in `src/analysis/engine/` (no Mozaik imports, no LLM): npv, irr, payback, tco, sensitivity. Unit-test with `node:test`.
 - LLM agents (`Financial`, `BuildBuy`, `RedTeam`, `Synthesizer`) are `createAgent` participants triggered by `EV.AnalysisRequested`. Their tools call the engine (`compute_scenario`, `compute_tco`, `run_sensitivity`) so the model supplies assumption ids and the code returns numbers.
 - Use structured output (`InferenceInput.structuredOutput`) for the `BusinessPlan`, then validate with Ajv before emitting `EV.PlanReady`.
-- Recompute path for the dashboard's assumption editor must not call an LLM: engine only.
+- Recompute path for the dashboard's assumption editor must not call an LLM: engine only. It is triggered by `EV.AssumptionOverridden`.
+- Fixtures to develop against: `mocks/assumption.sample.json`, `mocks/scenario.sample.json`, `mocks/business_plan.sample.json`.

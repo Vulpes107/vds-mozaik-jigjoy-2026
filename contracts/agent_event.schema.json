@@ -11,6 +11,7 @@
     "seq": { "type": "integer", "minimum": 0, "description": "Monotonic per run; lets clients resume from Last-Event-ID." },
     "ts": { "$ref": "common.schema.json#/$defs/isoDateTime" },
     "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "project_id": { "$ref": "common.schema.json#/$defs/id", "description": "Optional p_ id of the long-lived project this run belongs to." },
     "type": {
       "enum": [
         "run_started", "run_paused", "run_completed", "run_failed",

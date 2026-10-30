@@ -8,7 +8,7 @@ Run lifecycle, Topic Planner, shared Task Board, **dynamic Allocator**, budgets,
 ## Produces
 - `Topic` (planner output + state transitions), `AgentEvent` stream.
 - HTTP API (Node `http`/Hono/Fastify - pick one in an ADR): `POST /runs` (CompanyProfile), `GET /runs/{id}`, `GET /runs/{id}/topics`, `POST /runs/{id}/topics/{tid}/approve`, `GET /runs/{id}/events` (SSE, supports `Last-Event-ID`), `POST /runs/{id}/checkpoints/{cid}` (human approve/reject), `GET /runs/{id}/plan`.
-- Agent-facing API (used by B and C): claim task, report scout scores (`relevance`,`impact`), update `confidence`/`progress`, submit `Finding`/`Source`, request reassignment.
+- Agent-facing interface (used by B and C) is in-process events only, no HTTP: tasks via `EV.TaskAssigned`; B reports via `EV.TopicScored`, `EV.TopicProgress`, `EV.TopicSuggested`, `EV.ResearchGap`, `EV.ReassignmentRequested`, and writes `Finding`/`Source` directly to `RunState` then emits `EV.FindingSubmitted`/`EV.SourceSubmitted`. Dashboard assumption edits arrive at your API and go out as `EV.AssumptionOverridden` for C.
 
 ## Consumes
 `CompanyProfile` (from D), `Finding`/`Source` (from B), `BusinessPlan`/`Scenario` (from C).

@@ -10,6 +10,7 @@
     "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "id": { "$ref": "common.schema.json#/$defs/id" },
     "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "project_id": { "$ref": "common.schema.json#/$defs/id", "description": "Optional p_ id of the long-lived project this run belongs to." },
     "url": { "type": "string", "format": "uri" },
     "title": { "type": "string" },
     "publisher": { "type": "string" },

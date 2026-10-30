@@ -26,6 +26,16 @@ export const EV = {
 	PlanReady: "plan.ready",
 	CheckpointRequested: "checkpoint.requested",
 	CheckpointResolved: "checkpoint.resolved",
+	/** Worker (B) reports confidence/progress on its topic; Allocator applies it to the Topic. */
+	TopicProgress: "topic.progress",
+	/** Analyst (B) proposes a new topic; Planner scores it before it can enter the board. */
+	TopicSuggested: "topic.suggested",
+	/** Worker (B) hit a research gap (provider outage, blocked pages); Allocator may mark the topic research_incomplete. */
+	ResearchGap: "research.gap",
+	/** Worker asks to be moved off its topic (stuck, nothing left to find). */
+	ReassignmentRequested: "reassignment.requested",
+	/** Dashboard edit (via A's API) of Assumption.user_override; analysis (C) recomputes without an LLM. */
+	AssumptionOverridden: "assumption.overridden",
 } as const
 
 export type EventType = (typeof EV)[keyof typeof EV]
@@ -55,6 +65,40 @@ export interface TopicStateChangedPayload {
 	from: string
 	to: string
 	reason: string
+}
+
+export interface TopicProgressPayload {
+	topicId: string
+	slotId: string
+	confidence?: number
+	progress?: number
+}
+
+export interface TopicSuggestedPayload {
+	title: string
+	question: string
+	category: string
+	rationale: string
+	/** Topic the suggestion came out of. */
+	fromTopicId: string
+}
+
+export interface ResearchGapPayload {
+	topicId: string
+	slotId: string
+	reason: string
+}
+
+export interface ReassignmentRequestedPayload {
+	slotId: string
+	topicId: string
+	reason: string
+}
+
+export interface AssumptionOverriddenPayload {
+	assumptionId: string
+	/** null clears the override. */
+	value: number | null
 }
 
 export interface IdPayload {

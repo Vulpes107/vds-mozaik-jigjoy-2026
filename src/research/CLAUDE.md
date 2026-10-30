@@ -6,7 +6,7 @@ You own `src/research/`. Read root `CLAUDE.md` and `docs/MASTERPLAN.md` §3, §5
 Scout, Collector, Analyst, Verifier agents and the provider-neutral search/fetch tool layer (Tavily is the first adapter). Turn a `Topic` into sourced, structured `Finding`s with honest confidence.
 
 ## Produces
-`Source`, `Finding` (submitted through A's agent API). Scout scores (`relevance`, `impact`) per topic. Optionally proposes new topics (never adds them directly).
+`Source`, `Finding` (written to `RunState.sources`/`findings`, then `EV.SourceSubmitted`/`EV.FindingSubmitted`; there is no HTTP API between B and A). Scout scores via `EV.TopicScored`, progress via `EV.TopicProgress`, gaps via `EV.ResearchGap`. Optionally proposes new topics via `EV.TopicSuggested` (never adds them directly). Never write `RunState.topics`.
 
 ## Consumes
 `Topic` (assignments from A). Mock the A API from `mocks/` until it exists.

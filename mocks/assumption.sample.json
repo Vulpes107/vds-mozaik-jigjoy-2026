@@ -1,0 +1,31 @@
+[
+  {
+    "schema_version": "1.0",
+    "id": "as_001",
+    "run_id": "r_demo1",
+    "text": "Average price per user per month",
+    "unit": "EUR/user/month",
+    "low": 39,
+    "base": 49,
+    "high": 59,
+    "user_override": null,
+    "basis_finding_ids": ["f_001"],
+    "origin": "research",
+    "confidence": 0.7,
+    "sensitivity_rank": 1
+  },
+  {
+    "schema_version": "1.0",
+    "id": "as_002",
+    "run_id": "r_demo1",
+    "text": "Annual churn",
+    "unit": "ratio/yr",
+    "low": 0.04,
+    "base": 0.06,
+    "high": 0.1,
+    "basis_finding_ids": [],
+    "origin": "default",
+    "confidence": 0.4,
+    "sensitivity_rank": 2
+  }
+]

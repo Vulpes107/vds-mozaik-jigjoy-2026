@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://masterplan.local/contracts/topic.schema.json",
   "title": "Topic",
-  "description": "A research task on the shared Task Board. Owned/written by orchestrator (A); research agents (B) update scores via the API.",
+  "description": "A research task on the shared Task Board. Owned/written by orchestrator (A); research agents (B) report scores and progress via EV.TopicScored / EV.TopicProgress.",
   "type": "object",
   "required": ["schema_version", "id", "run_id", "title", "category", "state", "importance_prior"],
   "additionalProperties": false,
@@ -10,6 +10,7 @@
     "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "id": { "$ref": "common.schema.json#/$defs/id" },
     "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "project_id": { "$ref": "common.schema.json#/$defs/id", "description": "Optional p_ id of the long-lived project this run belongs to." },
     "title": { "type": "string", "minLength": 1 },
     "question": { "type": "string", "description": "The concrete question this topic must answer." },
     "category": {
@@ -19,7 +20,7 @@
         "esg", "ip", "existing_solutions", "cyber_ops", "other"
       ]
     },
-    "state": { "enum": ["queued", "scouting", "deep", "shallow", "closed", "dropped"] },
+    "state": { "enum": ["queued", "scouting", "deep", "shallow", "closed", "dropped", "research_incomplete"] },
     "importance_prior": { "$ref": "common.schema.json#/$defs/score" },
     "relevance": { "$ref": "common.schema.json#/$defs/score" },
     "impact": { "$ref": "common.schema.json#/$defs/score" },
@@ -38,7 +39,7 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "state": { "enum": ["dropped", "shallow", "closed"] } }, "required": ["state"] },
+      "if": { "properties": { "state": { "enum": ["dropped", "shallow", "closed", "research_incomplete"] } }, "required": ["state"] },
       "then": { "required": ["state_reason"] }
     }
   ]

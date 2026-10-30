@@ -9,6 +9,7 @@
   "properties": {
     "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "project_id": { "$ref": "common.schema.json#/$defs/id", "description": "Optional p_ id of the long-lived project this run belongs to." },
     "generated_at": { "$ref": "common.schema.json#/$defs/isoDateTime" },
     "overall_confidence": { "$ref": "common.schema.json#/$defs/score" },
     "executive_summary": { "type": "string" },

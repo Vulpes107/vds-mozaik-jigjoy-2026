@@ -8,11 +8,14 @@ Design: `docs/MASTERPLAN.md`. Integration surface: `contracts/`. Live status: `S
 | Path | Machine | Owns |
 |---|---|---|
 | `src/orchestrator/`, `contracts/`, `src/shared/` | A | task board, planner, allocator, API/SSE, shared runtime |
+| root `package.json`, `package-lock.json`, `tsconfig.json`, `config/`, `docs/adr/` | A | dependencies, model IDs, ADRs |
 | `src/research/` | B | scout/collector/analyst/verifier agents, Tavily tools |
 | `src/analysis/` | C | financial engine, build-vs-buy, red team, synthesizer |
-| `dashboard/`, `mocks/`, `e2e/` | D | UI, fixtures, end-to-end tests |
+| `dashboard/` (own `package.json`), `mocks/`, `e2e/`, `docs/DEMO.md` | D | UI, fixtures, end-to-end tests |
 
 Need a change in someone else's path? Open an issue/PR comment addressed to the owner. Never push into their path.
+One exception: a PR that changes `contracts/` adds or updates its fixture in `mocks/` in the same PR (A only).
+`STATUS.md` is shared: edit only your own section.
 
 ## Mozaik model (read this once)
 - **One runtime**, created in `src/shared/runtime.ts` (`startRuntime`). Import `join`, `sendEvent`, `runLoop`, … from there. Never call `defineRuntime`/`initializeRuntime` elsewhere.

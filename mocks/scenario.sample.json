@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "id": "sc_1",
+    "run_id": "r_demo1",
+    "name": "Do nothing",
+    "kind": "do_nothing",
+    "case": "base",
+    "currency": "EUR",
+    "capex": 0,
+    "revenue_by_year": [1000000, 980000, 950000],
+    "opex_by_year": [900000, 910000, 920000],
+    "discount_rate": 0.1,
+    "metrics": { "npv": 166000, "irr": null, "payback_months": null, "break_even_month": 0, "min_cash_balance": 200000, "runway_breached": false },
+    "probability": 0.3,
+    "assumption_ids": ["as_001", "as_002"]
+  },
+  {
+    "schema_version": "1.0",
+    "id": "sc_2",
+    "run_id": "r_demo1",
+    "name": "Expand",
+    "kind": "expand",
+    "case": "base",
+    "currency": "EUR",
+    "capex": 400000,
+    "tranches": [
+      { "amount": 150000, "month": 0, "kill_criteria": ["Fewer than 20 paying pilots by month 6"] },
+      { "amount": 250000, "month": 6, "kill_criteria": ["CAC above 1200 EUR"] }
+    ],
+    "revenue_by_year": [1100000, 1500000, 2100000],
+    "opex_by_year": [1050000, 1250000, 1500000],
+    "contingency_pct": 20,
+    "discount_rate": 0.1,
+    "metrics": { "npv": 312000, "irr": 0.31, "payback_months": 26, "break_even_month": 14, "min_cash_balance": -50000, "runway_breached": true },
+    "probability": 0.45,
+    "assumption_ids": ["as_001", "as_002"],
+    "notes": "Illustrative fixture figures, not engine output."
+  }
+]

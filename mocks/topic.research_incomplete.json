@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "id": "t_003",
+  "run_id": "r_demo1",
+  "project_id": "p_demo",
+  "title": "Regulator guidance on data residency",
+  "category": "regulation",
+  "state": "research_incomplete",
+  "state_reason": "Search provider outage after 3 retries; regulator site blocked.",
+  "importance_prior": 0.7,
+  "relevance": 0.8,
+  "impact": 0.6,
+  "confidence": 0.2,
+  "proposed_by": "planner",
+  "reassignment_count": 1
+}
