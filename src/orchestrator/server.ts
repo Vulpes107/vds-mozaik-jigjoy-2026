@@ -19,6 +19,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
 }
 function status(s: RunState): string {
 	if (s.plan) return "done"
+	if (s.agentEvents.some((e) => e.type === "run_completed")) return "stopped"
 	if ([...s.checkpoints.values()].some((c) => c.status === "pending")) return "awaiting_checkpoint"
 	if (s.agentEvents.some((e) => e.type === "analysis_started")) return "analysis"
 	if (s.topics.size === 0) return "planning"
@@ -80,5 +81,6 @@ export function _resetForTests(s?: RunState) {
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
 	const port = Number(process.env.PORT ?? 8787)
-	createServer(handle).listen(port, () => console.log(`orchestrator API on http://localhost:${port}`))
+	// Localhost only: no auth, and every run spends the team's LLM budget.
+	createServer(handle).listen(port, "127.0.0.1", () => console.log(`orchestrator API on http://localhost:${port}`))
 }
