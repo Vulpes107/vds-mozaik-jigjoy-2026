@@ -28,6 +28,7 @@ One exception: a PR that changes `contracts/` adds or updates its fixture in `mo
 - **Dynamic reassignment** = the Allocator emits `task.assigned` for a worker *slot*; the worker creates a fresh Agent for that task (clean context, short `handoff` note) and the old one `leave()`s. Slot ids are stable, agents are disposable.
 - Models are chosen only via `config/models.json` (names must exist in `supportedModels`).
 - Tools are `FunctionTool`s: `{ type: "function", name, description, parameters (JSON Schema), strict, invoke }`.
+- Shared helpers from A: `validate(schema, obj)` in `src/shared/validate.ts` (use it in every submit tool), `budgetInterceptor(topicId)` in `src/orchestrator/budget.ts` (4th arg of `runLoop`), `startRun`/`resumeRun` in `src/orchestrator/run.ts`.
 
 ## Non-negotiables
 1. **Contract-first.** Anything crossing a machine boundary conforms to `contracts/*.schema.json`. Validate on write and read; ignore unknown fields.

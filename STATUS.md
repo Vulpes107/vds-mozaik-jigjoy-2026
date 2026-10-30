@@ -9,8 +9,9 @@ Each machine edits **only its own section**. Update at every push. Blockers go i
 Phase 0 — contracts, shared runtime, skeleton
 
 ## Machine A — orchestrator / contracts
-- Done: contracts additive pass (`project_id`, `research_incomplete`); events for progress/suggestion/gap/reassignment/override; `src/shared/validate.ts` (Ajv over contracts, reuse it); Allocator as pure `allocate(board, event)` with seeded tests (drop->reassign, no oscillation over 100 ticks, budget exhaustion -> `analysis.requested` with unresolved ids) plus the runtime participant; Topic Planner with validated `submit_topics` (demo: 35 topics on the sample profile via the gateway); CI on push/PR; models switched to gateway (Sonnet 4.6 / Haiku 4.5)
-- Next: Cartographer -> `AgentEvent` + REST/SSE API, Operator checkpoints (topics.proposed -> topic.approved), per-topic budget InterceptionHandler, JSON snapshot + resume
+- Done (branch `a/allocator`): contracts additive pass; new events; `src/shared/validate.ts`; Allocator (pure `allocate` + participant, seeded tests); Topic Planner with validated `submit_topics`; Cartographer -> `AgentEvent`; Operator checkpoint `cp_topics`; REST+SSE API (`src/orchestrator/server.ts`, ADR 0001); Meter (tokens/USD -> `spend.recorded`); JSON snapshots + `resumeRun`; `budgetInterceptor(topicId)` for workers' `runLoop`; CI; gateway models
+- For B/C: import `validate` from `src/shared/validate.ts`; pass `budgetInterceptor(topicId)` as 4th arg of `runLoop`; start a run with `startRun(profile, opts)` from `src/orchestrator/run.ts` or `POST /runs`
+- Next: PR to main; per-topic `budget` set by planner/allocator; analyst-proposed topics (`topic.suggested`) scored by Planner; clarifying-questions checkpoint for thin profiles
 - Blockers:
 
 ## Machine B — research
