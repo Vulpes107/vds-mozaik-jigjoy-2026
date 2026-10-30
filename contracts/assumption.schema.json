@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/assumption.schema.json",
+  "title": "Assumption",
+  "description": "Every number in a projection must reference one of these. Owned by analysis (C); editable from the dashboard (D).",
+  "type": "object",
+  "required": ["schema_version", "id", "run_id", "text", "unit", "low", "base", "high"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "text": { "type": "string", "minLength": 1 },
+    "unit": { "type": "string" },
+    "low": { "type": "number" },
+    "base": { "type": "number" },
+    "high": { "type": "number" },
+    "user_override": { "type": ["number", "null"], "description": "Set from dashboard; wins over base when present." },
+    "basis_finding_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "origin": { "enum": ["research", "user", "default"], "default": "research" },
+    "confidence": { "$ref": "common.schema.json#/$defs/score" },
+    "sensitivity_rank": { "type": "integer", "minimum": 1 }
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/business_plan.schema.json",
+  "title": "BusinessPlan",
+  "description": "Final output. Written by analysis (C); rendered by dashboard (D).",
+  "type": "object",
+  "required": ["schema_version", "run_id", "generated_at", "executive_summary", "recommendations", "scenario_ids", "decisions", "risks", "assumption_ids", "disclaimer"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "generated_at": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "overall_confidence": { "$ref": "common.schema.json#/$defs/score" },
+    "executive_summary": { "type": "string" },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rank", "title", "rationale", "confidence", "finding_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string" },
+          "rationale": { "type": "string" },
+          "category": { "enum": ["strategy", "finance", "product", "market", "risk", "operations", "other"] },
+          "confidence": { "$ref": "common.schema.json#/$defs/score" },
+          "finding_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+          "scenario_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+          "what_would_change_this": { "type": "string" }
+        }
+      }
+    },
+    "scenario_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "chosen_scenario_id": { "$ref": "common.schema.json#/$defs/id" },
+    "decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["continue_vs_change", "investment"],
+      "properties": {
+        "continue_vs_change": {
+          "type": "object",
+          "required": ["verdict", "scores"],
+          "additionalProperties": false,
+          "properties": {
+            "verdict": { "enum": ["continue", "optimise", "expand", "pivot", "exit"] },
+            "scores": { "type": "object", "additionalProperties": { "$ref": "common.schema.json#/$defs/score" } },
+            "rationale": { "type": "string" }
+          }
+        },
+        "investment": {
+          "type": "object",
+          "required": ["currency", "low", "base", "high"],
+          "additionalProperties": false,
+          "properties": {
+            "currency": { "$ref": "common.schema.json#/$defs/currency" },
+            "low": { "type": "number" },
+            "base": { "type": "number" },
+            "high": { "type": "number" },
+            "staged": { "type": "boolean" },
+            "rationale": { "type": "string" }
+          }
+        },
+        "build_vs_buy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["capability", "verdict", "tco_build", "tco_buy", "horizon_years"],
+            "additionalProperties": false,
+            "properties": {
+              "capability": { "type": "string" },
+              "verdict": { "enum": ["build", "buy", "partner", "defer"] },
+              "tco_build": { "type": "number" },
+              "tco_buy": { "type": "number" },
+              "horizon_years": { "type": "integer" },
+              "flip_point": { "type": "string", "description": "Condition at which the verdict flips." },
+              "candidate_vendors": { "type": "array", "items": { "type": "string" } },
+              "finding_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } }
+            }
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "likelihood", "severity", "mitigation"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/id" },
+          "title": { "type": "string" },
+          "category": { "type": "string" },
+          "likelihood": { "$ref": "common.schema.json#/$defs/score" },
+          "severity": { "$ref": "common.schema.json#/$defs/score" },
+          "mitigation": { "type": "string" },
+          "finding_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } }
+        }
+      }
+    },
+    "roadmap": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["month", "milestone"],
+        "additionalProperties": false,
+        "properties": {
+          "month": { "type": "integer", "minimum": 0, "maximum": 120 },
+          "milestone": { "type": "string" },
+          "gate": { "type": "boolean" },
+          "kill_criteria": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "assumption_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "unresolved_topic_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" }, "description": "Topics not completed (budget/time) - must be disclosed." },
+    "dropped_topic_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "disclaimer": { "type": "string", "minLength": 1 }
+  }
+}

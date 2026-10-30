@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/agent_event.schema.json",
+  "title": "AgentEvent",
+  "description": "Streamed over SSE to the dashboard. Emitted by orchestrator (A) on behalf of all agents.",
+  "type": "object",
+  "required": ["schema_version", "ts", "run_id", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "seq": { "type": "integer", "minimum": 0, "description": "Monotonic per run; lets clients resume from Last-Event-ID." },
+    "ts": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "type": {
+      "enum": [
+        "run_started", "run_paused", "run_completed", "run_failed",
+        "topics_proposed", "topic_approved", "topic_state_changed", "topic_dropped",
+        "agent_spawned", "agent_assigned", "agent_reassigned", "agent_idle", "agent_failed",
+        "finding_added", "finding_verified", "conflict_detected",
+        "source_added", "injection_flagged",
+        "budget_warning", "budget_exhausted",
+        "analysis_started", "scenario_computed", "plan_ready",
+        "checkpoint_requested", "checkpoint_resolved"
+      ]
+    },
+    "agent_id": { "$ref": "common.schema.json#/$defs/id" },
+    "agent_role": { "enum": ["orchestrator", "planner", "scout", "collector", "analyst", "verifier", "allocator", "financial", "buildbuy", "redteam", "synthesizer"] },
+    "topic_id": { "$ref": "common.schema.json#/$defs/id" },
+    "from_topic_id": { "$ref": "common.schema.json#/$defs/id" },
+    "ref_id": { "$ref": "common.schema.json#/$defs/id", "description": "Finding, source, scenario or checkpoint id this event points at." },
+    "detail": { "type": "string" },
+    "payload": { "type": "object" }
+  }
+}

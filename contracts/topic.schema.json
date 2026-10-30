@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/topic.schema.json",
+  "title": "Topic",
+  "description": "A research task on the shared Task Board. Owned/written by orchestrator (A); research agents (B) update scores via the API.",
+  "type": "object",
+  "required": ["schema_version", "id", "run_id", "title", "category", "state", "importance_prior"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "title": { "type": "string", "minLength": 1 },
+    "question": { "type": "string", "description": "The concrete question this topic must answer." },
+    "category": {
+      "enum": [
+        "market", "customers", "competitors", "pricing", "technology", "regulation",
+        "supply_chain", "talent", "funding", "channels", "macro", "brand",
+        "esg", "ip", "existing_solutions", "cyber_ops", "other"
+      ]
+    },
+    "state": { "enum": ["queued", "scouting", "deep", "shallow", "closed", "dropped"] },
+    "importance_prior": { "$ref": "common.schema.json#/$defs/score" },
+    "relevance": { "$ref": "common.schema.json#/$defs/score" },
+    "impact": { "$ref": "common.schema.json#/$defs/score" },
+    "confidence": { "$ref": "common.schema.json#/$defs/score" },
+    "priority": { "type": "number", "minimum": 0, "description": "Computed: impact * (1 - confidence) / (1 + agents_assigned)." },
+    "depends_on": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "assigned_agents": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "product_scope": { "type": "array", "items": { "type": "string" }, "description": "Product names this topic applies to; empty = company-wide." },
+    "proposed_by": { "type": "string", "description": "planner or an agent id (analyst-discovered topics)." },
+    "state_reason": { "type": "string", "description": "Required when state is dropped, shallow or closed." },
+    "budget": { "$ref": "common.schema.json#/$defs/budget" },
+    "spent": { "$ref": "common.schema.json#/$defs/budget" },
+    "reassignment_count": { "type": "integer", "minimum": 0 },
+    "created_at": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "updated_at": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "enum": ["dropped", "shallow", "closed"] } }, "required": ["state"] },
+      "then": { "required": ["state_reason"] }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "id": "f_001",
+  "run_id": "r_demo1",
+  "topic_id": "t_001",
+  "claim": "Example Corp's entry plan costs 49 EUR per user per month.",
+  "type": "fact",
+  "value": 49,
+  "unit": "EUR/user/month",
+  "as_of": "2026-10-30",
+  "source_ids": ["s_001"],
+  "confidence": 0.8,
+  "verified": false,
+  "conflicts_with": []
+}

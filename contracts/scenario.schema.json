@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://masterplan.local/contracts/scenario.schema.json",
+  "title": "Scenario",
+  "description": "A costed strategic option. Computed deterministically in code by analysis (C), never by the LLM.",
+  "type": "object",
+  "required": ["schema_version", "id", "run_id", "name", "kind", "currency", "capex", "revenue_by_year", "opex_by_year", "assumption_ids"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "run_id": { "$ref": "common.schema.json#/$defs/id" },
+    "name": { "type": "string" },
+    "kind": { "enum": ["do_nothing", "optimise", "expand", "pivot", "exit", "build", "buy", "partner"] },
+    "case": { "enum": ["low", "base", "high"], "default": "base" },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
+    "capex": { "type": "number", "minimum": 0 },
+    "tranches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["amount", "month", "kill_criteria"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": { "type": "number", "minimum": 0 },
+          "month": { "type": "integer", "minimum": 0 },
+          "kill_criteria": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "revenue_by_year": { "type": "array", "items": { "type": "number" } },
+    "opex_by_year": { "type": "array", "items": { "type": "number" } },
+    "contingency_pct": { "type": "number", "minimum": 0, "maximum": 100, "default": 20 },
+    "discount_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "npv": { "type": "number" },
+        "irr": { "type": ["number", "null"] },
+        "payback_months": { "type": ["integer", "null"] },
+        "break_even_month": { "type": ["integer", "null"] },
+        "min_cash_balance": { "type": "number" },
+        "runway_breached": { "type": "boolean" }
+      }
+    },
+    "probability": { "$ref": "common.schema.json#/$defs/score" },
+    "assumption_ids": { "type": "array", "minItems": 1, "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "risk_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
+    "notes": { "type": "string" }
+  }
+}
