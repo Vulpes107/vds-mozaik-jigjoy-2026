@@ -82,10 +82,13 @@ export interface GatewayLimits {
 	researchCost: number
 }
 
+// Every tool result is re-sent as context on each later turn, so these sizes drive task cost more than anything else.
+// 12k chars per page blew the per-task token cap before the first finding; the full text stays in the content store
+// and the Analyst reads it in chunks with read_material.
 const DEFAULT_LIMITS: GatewayLimits = {
-	maxResults: 8,
+	maxResults: 5,
 	maxFetchUrls: 20,
-	maxTextChars: 12_000,
+	maxTextChars: 3_000,
 	crawlPages: 10,
 	crawlDepth: 2,
 	searchTtlMs: 24 * 3600_000,

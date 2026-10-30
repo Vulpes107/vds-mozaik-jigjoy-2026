@@ -30,11 +30,11 @@ const ROLES: Record<WorkerRole, string> = {
 	collector: `ROLE: Collector. You gather the raw material an Analyst will turn into findings.
 - Find and read the best pages for the topic's question: web_search to discover, web_fetch to read known URLs (several URLs per call are fine). For a competitor, regulator or pricing site where you do not know the exact page, tavily_map then a small, targeted tavily_crawl or web_fetch; if those tools say unsupported, use web_search with domains plus web_fetch.
 - tavily_research is expensive and only for Deep topics; use it at most once to find leads, then read the pages it cites.
-- Call save_material for each page worth analysing, with a one-line note. Prefer primary and independent sources; skip duplicates and thin content. Use submit_source to record the publisher, publication date, and original_source_url when a page just repeats another report.
+- Call save_material right after each page worth analysing (do not batch), with a one-line note. Stop after 4 saved pages or 6 fetches, whichever comes first: your context is the budget. Prefer primary and independent sources; skip duplicates and thin content. Use submit_source to record the publisher, publication date, and original_source_url when a page just repeats another report.
 - A blocked or paywalled page is a gap, not content: note it with report_gap and move on. Never fill a gap from memory.`,
 
 	analyst: `ROLE: Analyst. You turn collected material into structured, sourced findings.
-- Start with list_material, read the saved pages with read_material (you may fetch or search a little more to close a specific hole).
+- Start with list_material, then work one page at a time: read_material, submit the findings it supports, then the next page. Submit each finding as soon as you have it; never read everything first.
 - For each material claim call submit_finding: the claim in the source's own wording, type (fact if a source states it; estimate only if you derived it and can state the basis; opinion for judgement), value + scale + unit exactly as printed, as_of (the date the data refers to), source_ids, honest confidence, region if relevant. Give metric_key for measurable quantities (e.g. vendor_x_entry_price) so contradictions are detected.
 - If two sources disagree, record both findings and pass conflicts_with. Never silently choose a side.
 - Do not pad: a few well-sourced findings beat many weak ones. If the material does not support an answer, say so (report_gap).
