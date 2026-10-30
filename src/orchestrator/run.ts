@@ -2,6 +2,8 @@
 import { SemanticEvent } from "@mozaik-ai/core"
 import { EV, type WorkerRole } from "../shared/events.ts"
 import { join, sendEvent, startRuntime, type Budget, type Obj, type RunState } from "../shared/runtime.ts"
+import { AnalysisSession, registerAnalysis } from "../analysis/index.ts"
+import { startResearch, tavilyProviders, type FetchProvider, type ResearchExtras, type SearchProvider } from "../research/index.ts"
 import { validate } from "../shared/validate.ts"
 import { makeAllocator } from "./allocator-participant.ts"
 import { defaultConfig, type AllocatorConfig } from "./allocator.ts"
@@ -23,6 +25,8 @@ export interface RunOptions {
 	snapshotDir?: string | null
 	/** Allocator clock period; 0 disables it (tests). */
 	tickMs?: number
+	/** Research workers: default Tavily from .env; pass providers to swap them, or false to run without research (tests). */
+	research?: false | { searchProviders: SearchProvider[]; fetchProviders: FetchProvider[]; extras?: ResearchExtras }
 }
 
 /** Applied when the profile sets no run_budget: a run never spends without a cap. */
@@ -55,6 +59,17 @@ export function resumeRun(runId: string, opts: RunOptions = {}): RunState {
 }
 
 let rejectionHandlerInstalled = false
+let producerId = ""
+
+/** Dashboard edit of an assumption; analysis (C) recomputes scenarios and plan without an LLM. */
+export function overrideAssumption(assumptionId: string, value: number | null): void {
+	sendEvent(SemanticEvent.create(EV.AssumptionOverridden, producerId, { assumptionId, value }), producerId)
+}
+
+function tavilyAsProviders() {
+	const { search, fetch, extras } = tavilyProviders()
+	return { searchProviders: [search], fetchProviders: [fetch], extras }
+}
 
 function joinParticipants(state: RunState, opts: RunOptions) {
 	const cartographer = makeCartographer()
@@ -71,6 +86,12 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 	join(makeOperator({ autoApprove: opts.autoApprove }))
 	join(makeAllocator(opts.allocator ?? defaultConfig))
 	join(makeMeter())
+	producerId = cartographer.getId()
+	if (opts.research !== false) {
+		const providers = opts.research ?? tavilyAsProviders()
+		startResearch({ state, ...providers, slots: [...state.slots.keys()], installSafetyNet: false })
+	}
+	registerAnalysis(new AnalysisSession(state))
 	if (opts.tickMs !== 0) {
 		setInterval(() => sendEvent(SemanticEvent.create(EV.AllocatorTick, cartographer.getId(), {}), cartographer.getId()), opts.tickMs ?? 10_000).unref()
 	}
