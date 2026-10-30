@@ -199,3 +199,29 @@ test("tick: stuck slots time out, wall-clock counts against the budget, unservab
 	a = allocate(b2, { type: EV.AllocatorTick, payload: {} }, c, 100_000)
 	assert.ok(a.some((x) => x.type === EV.BudgetExhausted))
 })
+
+test("a task that ends with a non-done outcome is retried instead of counted as finished", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	assert.equal(b.slots.get("c1")!.topicId, "t_1")
+	const a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "c1", role: "collector", outcome: "timeout", findings: 0, sources: 0 } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "deep")
+	assert.equal(b.topics.get("t_1")!.reassignment_count, 1)
+	assert.equal(assigns(a)[0]?.slotId, "c1") // the collector role is handed out again
+	assert.equal(b.slots.get("c1")!.topicId, "t_1")
+})
+
+test("a research gap keeps a topic that already has findings, and ends one that has none", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector" })
+	b.findings = new Map([["f_1", { topic_id: "t_1" }]])
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_1", slotId: "c1", reason: "paywalled report" } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "deep")
+	assert.equal(b.topics.get("t_1")!.state_reason, "gap: paywalled report")
+	assert.equal(b.slots.get("c1")!.topicId, "t_1")
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 3)
+	allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_2", slotId: "c1", reason: "provider outage" } }, cfg, 4)
+	assert.equal(b.topics.get("t_2")!.state, "research_incomplete")
+})
