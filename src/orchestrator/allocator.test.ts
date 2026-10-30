@@ -1,0 +1,144 @@
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import { EV } from "../shared/events.ts"
+import type { Slot } from "../shared/runtime.ts"
+import { allocate, defaultConfig, type Action, type Board, type Topic } from "./allocator.ts"
+
+function board(topics: Partial<Topic>[], slots: Record<string, Slot["role"]>, runBudget = {}): Board {
+	return {
+		topics: new Map(topics.map((t, i) => [t.id ?? `t_${i}`, { id: `t_${i}`, state: "queued", importance_prior: 0.5, ...t } as Topic])),
+		slots: new Map(Object.entries(slots).map(([id, role]) => [id, { role, topicId: null, assignedAt: 0, reassignments: 0 }])),
+		runBudget,
+		spent: { tokens: 0, calls: 0, usd: 0, seconds: 0 },
+	}
+}
+const assigns = (a: Action[]) => a.filter((x) => x.type === EV.TaskAssigned) as Extract<Action, { type: typeof EV.TaskAssigned }>[]
+const cfg = { ...defaultConfig, minDwellMs: 0 }
+
+test("low-relevance topic is dropped within one scout cycle and its slot is reassigned", () => {
+	const b = board([{ id: "t_1", importance_prior: 0.9 }, { id: "t_2", importance_prior: 0.5 }, { id: "t_3", importance_prior: 0.4 }], { s1: "scout" })
+	let a = allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 1000)
+	assert.deepEqual(assigns(a).map((x) => x.topicId), ["t_1"]) // highest prior first
+	assert.equal(b.topics.get("t_1")!.state, "scouting")
+
+	a = allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.9, rationale: "unrelated region" } }, cfg, 2000)
+	const t1 = b.topics.get("t_1")!
+	assert.equal(t1.state, "dropped")
+	assert.match(t1.state_reason!, /unrelated region/)
+	assert.ok(a.some((x) => x.type === EV.TopicDropped))
+	const re = assigns(a)[0]!
+	assert.equal(re.slotId, "s1")
+	assert.equal(re.topicId, "t_2")
+	assert.equal(re.fromTopicId, "t_1") // visible reassignment: dropped topic -> next topic
+	assert.equal(b.slots.get("s1")!.topicId, "t_2")
+	assert.equal(b.slots.get("s1")!.reassignments, 1)
+	assert.equal(b.topics.get("t_2")!.reassignment_count, 1)
+})
+
+test("gate: shallow vs deep, and roles needed per state", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 1)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.5, impact: 0.2, rationale: "" } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "shallow")
+	assert.equal(b.slots.get("an1")!.topicId, "t_1")
+	assert.equal(b.slots.get("c1")!.topicId, null) // shallow gets no collector
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.8, impact: 0.7, rationale: "" } }, cfg, 3)
+	assert.equal(b.topics.get("t_2")!.state, "deep")
+	assert.equal(b.slots.get("c1")!.topicId, "t_2")
+	assert.equal(b.slots.get("v1")!.topicId, "t_2")
+})
+
+test("no oscillation: scores bouncing around the drop threshold over 100 ticks change state once", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	let changes = 0
+	for (let i = 1; i <= 100; i++) {
+		const relevance = i % 2 ? 0.29 : 0.34 // below drop, then inside the hysteresis band
+		const a = allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance, impact: 0.5, rationale: "" } }, cfg, i)
+		changes += a.filter((x) => x.type === EV.TopicStateChanged).length
+	}
+	assert.equal(changes, 1)
+	assert.equal(b.topics.get("t_1")!.state, "dropped")
+	// Clear new evidence above the band reopens it.
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.6, impact: 0.5, rationale: "" } }, cfg, 101)
+	assert.notEqual(b.topics.get("t_1")!.state, "dropped")
+})
+
+test("budget exhaustion stops research and lists unresolved topics", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout" }, { calls: 10 })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	let a = allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: "s1", spent: { calls: 8 } } }, cfg, 1)
+	assert.ok(a.some((x) => x.type === EV.BudgetWarning))
+	a = allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: "s1", spent: { calls: 2 } } }, cfg, 2)
+	assert.ok(a.some((x) => x.type === EV.BudgetExhausted))
+	const req = a.find((x) => x.type === EV.AnalysisRequested) as Extract<Action, { type: typeof EV.AnalysisRequested }>
+	assert.deepEqual(req.unresolvedTopicIds, ["t_1", "t_2"])
+	// Idempotent: a later event neither re-warns nor re-requests analysis.
+	a = allocate(b, { type: EV.SlotIdle, payload: { slotId: "s1" } }, cfg, 3)
+	assert.equal(a.length, 0)
+})
+
+test("full run: every topic reaches closed or dropped, then analysis is requested", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }, { id: "t_3" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	const all: Action[] = []
+	let now = 1
+	// Drive until quiet: scouts score, workers finish, confidence climbs.
+	for (let i = 0; i < 50 && !all.some((x) => x.type === EV.AnalysisRequested); i++) {
+		for (const [slotId, s] of b.slots) {
+			if (!s.topicId) continue
+			const t = b.topics.get(s.topicId)!
+			if (s.role === "scout") {
+				const rel = t.id === "t_3" ? 0.1 : 0.9
+				const imp = t.id === "t_2" ? 0.2 : 0.8
+				all.push(...allocate(b, { type: EV.TopicScored, payload: { topicId: t.id, relevance: rel, impact: imp, rationale: "seed" } }, cfg, now++))
+			} else {
+				all.push(...allocate(b, { type: EV.TopicProgress, payload: { topicId: t.id, slotId, confidence: 0.5 } }, cfg, now++))
+				all.push(...allocate(b, { type: EV.TaskFinished, payload: { topicId: t.id, slotId, role: s.role } }, cfg, now++))
+			}
+		}
+	}
+	assert.deepEqual([...b.topics.values()].map((t) => [t.id, t.state]), [["t_1", "closed"], ["t_2", "closed"], ["t_3", "dropped"]])
+	const req = all.find((x) => x.type === EV.AnalysisRequested) as Extract<Action, { type: typeof EV.AnalysisRequested }>
+	assert.deepEqual(req.unresolvedTopicIds, [])
+	assert.deepEqual(req.droppedTopicIds, ["t_3"])
+	assert.ok([...b.slots.values()].every((s) => s.topicId === null))
+})
+
+test("close early on high confidence, but a deep topic waits for its verifier", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: "an1", confidence: 0.95 } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "deep")
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "v1", role: "verifier" } }, cfg, 3)
+	allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: "an1", confidence: 0.95 } }, cfg, 4)
+	assert.equal(b.topics.get("t_1")!.state, "closed")
+})
+
+test("research gap marks the topic research_incomplete and frees the slot", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	const a = allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_1", slotId: "c1", reason: "provider outage" } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "research_incomplete")
+	assert.equal(b.topics.get("t_1")!.state_reason, "provider outage")
+	assert.equal(b.slots.get("c1")!.topicId, null)
+	assert.equal(assigns(a).length, 0) // t_2 is still queued; the collector has nothing to do yet
+})
+
+test("anti-thrash: reassignment request honours dwell time and max reassignments", () => {
+	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout" })
+	const dwell = { ...defaultConfig, minDwellMs: 1000, maxReassignments: 1 }
+	allocate(b, { type: EV.TopicApproved, payload: {} }, dwell, 0)
+	allocate(b, { type: EV.ReassignmentRequested, payload: { slotId: "s1", topicId: "t_1", reason: "stuck" } }, dwell, 500)
+	assert.equal(b.slots.get("s1")!.topicId, "t_1") // too early
+	allocate(b, { type: EV.ReassignmentRequested, payload: { slotId: "s1", topicId: "t_1", reason: "stuck" } }, dwell, 1500)
+	assert.equal(b.slots.get("s1")!.topicId, "t_1") // freed and immediately re-picked: t_1 is still the best scout target
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, dwell, 1600)
+	assert.equal(b.slots.get("s1")!.topicId, "t_2")
+	assert.equal(b.slots.get("s1")!.reassignments, 1)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1700)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.1, impact: 0.1, rationale: "" } }, dwell, 1800)
+	assert.equal(b.slots.get("s1")!.topicId, null) // t_1 dropped; slot at max reassignments is retired
+})
