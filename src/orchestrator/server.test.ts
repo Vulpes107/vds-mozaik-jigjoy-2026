@@ -21,6 +21,9 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 	assert.equal(r.status, 201)
 	const { run_id } = (await r.json()) as { run_id: string }
 	assert.equal((await api("/runs", { method: "POST", body: "{}" })).status, 409)
+	r = await api("/runs")
+	assert.equal(r.status, 200)
+	assert.ok(Array.isArray(await r.json()))
 	assert.equal((await api(`/runs/${run_id}/plan`)).status, 404)
 	assert.equal(((await (await api(`/runs/${run_id}`)).json()) as { status: string }).status, "planning")
 
