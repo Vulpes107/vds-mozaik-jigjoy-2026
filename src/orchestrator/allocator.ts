@@ -39,6 +39,8 @@ export interface Board {
 	runBudget: Budget
 	spent: Required<Budget>
 	startedAt?: number
+	/** RunState.findings; a research gap only ends a topic that has none. */
+	findings?: Map<string, { topic_id?: unknown }>
 }
 
 export interface AllocatorConfig {
@@ -70,7 +72,7 @@ export const defaultConfig: AllocatorConfig = {
 	minDwellMs: 30_000,
 	maxReassignments: 5,
 	warnAt: 0.8,
-	taskTimeoutMs: 180_000,
+	taskTimeoutMs: 420_000, // above research's own per-task limits (<= 360 s), so workers time themselves out first
 }
 
 export type Action =
@@ -178,6 +180,10 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				retry(t, "scout finished without scoring")
 				break
 			}
+			if (p.outcome && p.outcome !== "done") {
+				retry(t, `${p.role} ${p.outcome}`)
+				break
+			}
 			const done = sc.rolesDone.get(t.id) ?? new Set<WorkerRole>()
 			done.add(p.role)
 			sc.rolesDone.set(t.id, done)
@@ -220,7 +226,12 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		case EV.ResearchGap: {
 			const p = event.payload as ResearchGapPayload
 			const t = topic(p.topicId)
-			if (t && LIVE.includes(t.state)) {
+			if (!t || !LIVE.includes(t.state)) break
+			const hasFindings = [...(board.findings?.values() ?? [])].some((f) => f.topic_id === t.id)
+			if (hasFindings) {
+				// Partial evidence beats none: record the gap, keep the findings and the workers.
+				t.state_reason = `gap: ${p.reason}`
+			} else {
 				setState(t, "research_incomplete", p.reason)
 				freeAllOn(t.id)
 			}

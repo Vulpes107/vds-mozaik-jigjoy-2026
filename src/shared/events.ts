@@ -51,6 +51,8 @@ export interface TopicScoredPayload {
 	relevance: number
 	impact: number
 	rationale: string
+	evidenceQuality?: "none" | "thin" | "adequate"
+	searches?: number
 }
 
 export interface TaskAssignedPayload {
@@ -84,6 +86,11 @@ export interface TaskFinishedPayload {
 	slotId: string
 	topicId: string
 	role: WorkerRole
+	/** Anything but "done" means the task produced no trustworthy result; the Allocator retries the role. */
+	outcome?: "done" | "budget_exhausted" | "timeout" | "error"
+	summary?: string
+	findings?: number
+	sources?: number
 }
 
 export interface SlotIdlePayload {

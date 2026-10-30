@@ -17,7 +17,7 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 	const base = `http://localhost:${(server.address() as { port: number }).port}`
 	const api = (path: string, init?: RequestInit) => fetch(base + path, init)
 
-	let r = await api("/runs", { method: "POST", body: JSON.stringify({ profile, planner: false, slots: { scout: 1 } }) })
+	let r = await api("/runs", { method: "POST", body: JSON.stringify({ profile, planner: false, research: false, slots: { scout: 1 } }) })
 	assert.equal(r.status, 201)
 	const { run_id } = (await r.json()) as { run_id: string }
 	assert.equal((await api("/runs", { method: "POST", body: "{}" })).status, 409)
@@ -53,6 +53,15 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 		state.agentEvents.map((e) => e.type),
 		["run_started", "topics_proposed", "checkpoint_requested", "checkpoint_resolved", "topic_approved", "topic_state_changed", "agent_assigned"],
 	)
+
+	// Assumption editor: the override reaches analysis (C) and lands on the assumption.
+	state.assumptions.set("as_001", { schema_version: "1.0", id: "as_001", run_id, text: "price", unit: "EUR", low: 1, base: 2, high: 3 })
+	assert.equal((await api(`/runs/${run_id}/assumptions/as_999`, { method: "POST", body: "{}" })).status, 404)
+	assert.equal((await api(`/runs/${run_id}/assumptions/as_001`, { method: "POST", body: JSON.stringify({ value: "x" }) })).status, 400)
+	assert.equal((await api(`/runs/${run_id}/assumptions/as_001`, { method: "POST", body: JSON.stringify({ value: 5 }) })).status, 202)
+	await tick()
+	assert.equal(state.assumptions.get("as_001")?.user_override, 5)
+	assert.equal(((await (await api(`/runs/${run_id}/assumptions`)).json()) as { id: string }[])[0]?.id, "as_001")
 
 	// SSE replay from Last-Event-ID, then a live event.
 	const ac = new AbortController()

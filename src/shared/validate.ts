@@ -26,5 +26,5 @@ export function validate(schema: SchemaName, obj: unknown): string | null {
 	const fn = ajv.getSchema(`${schema}.schema.json`)
 	if (!fn) throw new Error(`unknown schema ${schema}`)
 	if (fn(obj)) return null
-	return (fn.errors ?? []).map((e: { instancePath: string; message?: string; params?: Record<string, unknown> }) => `${e.instancePath || "<root>"} ${e.message}${e.params?.allowedValues ? ` (${(e.params.allowedValues as string[]).join(", ")})` : ""}`).join("\n")
+	return (fn.errors ?? []).map((e: { instancePath: string; message?: string; params?: Record<string, unknown> }) => `${e.instancePath || "<root>"} ${e.message}${e.params?.allowedValues ? ` (${(e.params.allowedValues as string[]).join(", ")})` : ""}${e.params?.additionalProperty ? ` '${String(e.params.additionalProperty)}'` : ""}`).join("\n")
 }

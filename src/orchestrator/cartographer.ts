@@ -20,7 +20,7 @@ const MAP: Record<string, (p: P) => Partial<Obj> | null> = {
 		return { type: a.fromTopicId ? "agent_reassigned" : "agent_assigned", agent_id: a.slotId, agent_role: a.role, topic_id: a.topicId, from_topic_id: a.fromTopicId, detail: a.handoff }
 	},
 	[EV.SlotIdle]: (p) => ({ type: "agent_idle", agent_id: p.slotId }),
-	[EV.FindingSubmitted]: (p) => ({ type: "finding_added", ref_id: p.id, topic_id: p.topicId }),
+	[EV.FindingSubmitted]: (p) => (p.updated ? null : { type: "finding_added", ref_id: p.id, topic_id: p.topicId }),
 	[EV.SourceSubmitted]: (p) => ({ type: "source_added", ref_id: p.id, topic_id: p.topicId }),
 	[EV.ConflictDetected]: (p) => ({ type: "conflict_detected", ref_id: p.id, topic_id: p.topicId, detail: p.detail }),
 	[EV.InjectionFlagged]: (p) => ({ type: "injection_flagged", ref_id: p.id, topic_id: p.topicId, detail: p.detail }),

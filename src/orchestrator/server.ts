@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { Obj, RunState } from "../shared/runtime.ts"
 import { onAgentEvent } from "./cartographer.ts"
 import { resolveCheckpoint } from "./operator.ts"
-import { startRun, type RunOptions } from "./run.ts"
+import { overrideAssumption, startRun, type RunOptions } from "./run.ts"
 
 let state: RunState | undefined
 
@@ -36,7 +36,12 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 			const b = (await body(req)) as { profile?: Obj } & RunOptions
 			if (!b.profile) return json(res, 400, { error: "body must be { profile: CompanyProfile, auto_approve?, slots? }" })
 			try {
-				state = startRun(b.profile, { autoApprove: b.autoApprove ?? (b as { auto_approve?: boolean }).auto_approve, slots: b.slots, planner: b.planner })
+				state = startRun(b.profile, {
+					autoApprove: b.autoApprove ?? (b as { auto_approve?: boolean }).auto_approve,
+					slots: b.slots,
+					planner: b.planner,
+					...(b.research === false ? { research: false as const } : {}),
+				})
 			} catch (e) {
 				return json(res, 400, { error: String(e) })
 			}
@@ -51,6 +56,15 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
 		if (req.method === "GET" && rest[0] === "topics") return json(res, 200, [...s.topics.values()])
 		if (req.method === "GET" && rest[0] === "findings") return json(res, 200, [...s.findings.values()])
 		if (req.method === "GET" && rest[0] === "sources") return json(res, 200, [...s.sources.values()])
+		if (req.method === "GET" && rest[0] === "assumptions") return json(res, 200, [...s.assumptions.values()])
+		if (req.method === "GET" && rest[0] === "scenarios") return json(res, 200, [...s.scenarios.values()])
+		if (req.method === "POST" && rest[0] === "assumptions" && rest[1]) {
+			if (!s.assumptions.has(rest[1])) return json(res, 404, { error: "unknown assumption" })
+			const b = (await body(req)) as { value?: number | null }
+			if (b.value !== null && typeof b.value !== "number") return json(res, 400, { error: "body must be { value: number | null }" })
+			overrideAssumption(rest[1], b.value ?? null)
+			return json(res, 202, { assumption_id: rest[1], value: b.value ?? null })
+		}
 		if (req.method === "GET" && rest[0] === "plan") return s.plan ? json(res, 200, s.plan) : json(res, 404, { error: "plan not ready" })
 		if (req.method === "POST" && rest[0] === "checkpoints" && rest[1]) {
 			const b = (await body(req)) as { approved?: boolean }
