@@ -79,6 +79,8 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 		current = { stage, agent, timer }
 		runLoop(agent.getId(), stagePrompt(stage, session), {
 			model: modelFor(stage, opts.models),
+			// Required for Anthropic models: Mozaik copies it into max_tokens and the API rejects a missing value.
+			maxOutputTokens: 8000,
 			context: agent.getMemory().getContext(),
 			tools: agent.getTools(),
 		})
