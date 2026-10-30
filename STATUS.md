@@ -9,8 +9,8 @@ Each machine edits **only its own section**. Update at every push. Blockers go i
 Phase 0 — contracts, shared runtime, skeleton
 
 ## Machine A — orchestrator / contracts
-- Done: contracts additive pass (`project_id` on all schemas, topic state `research_incomplete`); new events `TopicProgress`, `TopicSuggested`, `ResearchGap`, `ReassignmentRequested`, `AssumptionOverridden`; ownership of root `package.json`/lockfile/`config/`/`docs/adr/`; B<->A interface fixed as in-process events only
-- Next: freeze schemas, CI (`npm run check`), task board
+- Done: contracts additive pass (`project_id`, `research_incomplete`); events for progress/suggestion/gap/reassignment/override; `src/shared/validate.ts` (Ajv over contracts, reuse it); Allocator as pure `allocate(board, event)` with seeded tests (drop->reassign, no oscillation over 100 ticks, budget exhaustion -> `analysis.requested` with unresolved ids) plus the runtime participant; Topic Planner with validated `submit_topics` (demo: 35 topics on the sample profile via the gateway); CI on push/PR; models switched to gateway (Sonnet 4.6 / Haiku 4.5)
+- Next: Cartographer -> `AgentEvent` + REST/SSE API, Operator checkpoints (topics.proposed -> topic.approved), per-topic budget InterceptionHandler, JSON snapshot + resume
 - Blockers:
 
 ## Machine B — research
