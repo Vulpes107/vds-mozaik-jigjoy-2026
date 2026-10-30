@@ -1,12 +1,12 @@
 {
-  "_comment": "Single source of truth for model IDs. Names must exist in supportedModels of @mozaik-ai/core 4.1. The hackathon gateway (ANTHROPIC_BASE_URL) serves only claude-sonnet-4-6 and claude-haiku-4-5; the team budget is $20, so cheap roles use Haiku.",
+  "_comment": "Single source of truth for model IDs. Names must exist in supportedModels of @mozaik-ai/core 4.1. The hackathon gateway (ANTHROPIC_BASE_URL) serves only claude-sonnet-4-6 and claude-haiku-4-5 and the team budget is $20: Haiku everywhere except the two one-shot prose roles.",
   "planner": "claude-sonnet-4-6",
   "scout": "claude-haiku-4-5",
   "collector": "claude-haiku-4-5",
-  "analyst": "claude-sonnet-4-6",
-  "verifier": "claude-sonnet-4-6",
-  "financial": "claude-sonnet-4-6",
-  "buildbuy": "claude-sonnet-4-6",
-  "redteam": "claude-sonnet-4-6",
+  "analyst": "claude-haiku-4-5",
+  "verifier": "claude-haiku-4-5",
+  "financial": "claude-haiku-4-5",
+  "buildbuy": "claude-haiku-4-5",
+  "redteam": "claude-haiku-4-5",
   "synthesizer": "claude-sonnet-4-6"
 }
