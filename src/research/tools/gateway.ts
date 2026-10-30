@@ -152,7 +152,7 @@ export class ResearchGateway {
 			hits.push({
 				title: title.slice(0, 200),
 				url: r.url,
-				snippet: rest.join("\n").slice(0, 1200),
+				snippet: rest.join("\n").slice(0, 350), // 5 x 1200 chars per search was the biggest single driver of task cost
 				...(r.publishedAt ? { publishedAt: r.publishedAt } : {}),
 				sourceId: cand.id,
 				injectionFlagged: scan.flagged,

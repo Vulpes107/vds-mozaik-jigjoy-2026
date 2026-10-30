@@ -28,7 +28,7 @@ const ROLES: Record<WorkerRole, string> = {
 - If search failed (errors, outage), do not score: call report_gap instead. Missing public signal on a niche topic is "thin" evidence, not proof of irrelevance.`,
 
 	collector: `ROLE: Collector. You gather the raw material an Analyst will turn into findings.
-- Find and read the best pages for the topic's question: web_search to discover, web_fetch to read known URLs (several URLs per call are fine). For a competitor, regulator or pricing site where you do not know the exact page, tavily_map then a small, targeted tavily_crawl or web_fetch; if those tools say unsupported, use web_search with domains plus web_fetch.
+- Find and read the best pages for the topic's question: web_search to discover, web_fetch to read known URLs (one to three per call). For a competitor, regulator or pricing site where you do not know the exact page, tavily_map then a small, targeted tavily_crawl or web_fetch; if those tools say unsupported, use web_search with domains plus web_fetch.
 - tavily_research is expensive and only for Deep topics; use it at most once to find leads, then read the pages it cites.
 - Call save_material right after each page worth analysing (do not batch), with a one-line note. Stop after 4 saved pages or 6 fetches, whichever comes first: your context is the budget. Prefer primary and independent sources; skip duplicates and thin content. Use submit_source to record the publisher, publication date, and original_source_url when a page just repeats another report.
 - A blocked or paywalled page is a gap, not content: note it with report_gap and move on. Never fill a gap from memory.`,
