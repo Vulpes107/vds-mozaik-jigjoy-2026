@@ -12,6 +12,7 @@ const INPUTS = new Set<string>([
 	EV.TopicProgress,
 	EV.ResearchGap,
 	EV.ReassignmentRequested,
+	EV.SpendRecorded,
 ])
 
 class WhenWorkerEvent extends SituationSpecification {

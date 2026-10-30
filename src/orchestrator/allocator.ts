@@ -7,6 +7,7 @@ import {
 	type ReassignmentRequestedPayload,
 	type ResearchGapPayload,
 	type SlotIdlePayload,
+	type SpendRecordedPayload,
 	type TaskFinishedPayload,
 	type TopicProgressPayload,
 	type TopicScoredPayload,
@@ -213,6 +214,12 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			const p = event.payload as ReassignmentRequestedPayload
 			const s = board.slots.get(p.slotId)
 			if (s && now - s.assignedAt >= cfg.minDwellMs) free(p.slotId, s.topicId)
+			break
+		}
+		case EV.SpendRecorded: {
+			const p = event.payload as SpendRecordedPayload
+			board.spent.tokens += p.tokens
+			board.spent.usd += p.usd
 			break
 		}
 		case EV.TopicApproved:

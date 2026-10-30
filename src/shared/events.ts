@@ -36,6 +36,8 @@ export const EV = {
 	ReassignmentRequested: "reassignment.requested",
 	/** Dashboard edit (via A's API) of Assumption.user_override; analysis (C) recomputes without an LLM. */
 	AssumptionOverridden: "assumption.overridden",
+	/** Meter (A) turns inference.completed token usage into run spend; Allocator is the only writer of RunState.spent. */
+	SpendRecorded: "spend.recorded",
 } as const
 
 export type EventType = (typeof EV)[keyof typeof EV]
@@ -111,6 +113,13 @@ export interface AssumptionOverriddenPayload {
 	assumptionId: string
 	/** null clears the override. */
 	value: number | null
+}
+
+export interface SpendRecordedPayload {
+	agentId: string
+	model: string
+	tokens: number
+	usd: number
 }
 
 export interface IdPayload {
