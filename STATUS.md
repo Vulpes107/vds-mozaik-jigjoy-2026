@@ -40,5 +40,8 @@ Phase 0 — contracts, shared runtime, skeleton
 
 ## Machine D — dashboard / mocks / e2e
 - Done: seed fixtures in `mocks/`; added assumption, scenario, business_plan and topic.research_incomplete fixtures
-- Next: mock server with scripted event replay, layout of all panels
+- Done: `dashboard/mock-server/server.mjs` — plain-Node REST+SSE server mirroring `src/orchestrator/server.ts`'s shape (ADR 0001) from `mocks/`; replays `agent_event.sample.json` with real timing (`MOCK_SPEED` to compress), applies drop/reassign effects to in-memory topics, supports SSE reconnect via `Last-Event-ID`/`?since=`
+- Done: `e2e/run-demo.mjs` — spawns the mock server (or `--real` against A's server), asserts the topic-dropped -> agent-reassigned hero moment appears on the SSE stream, validates served topics/plan against `contracts/`, checks for leaked API-key-shaped strings
+- Done: `docs/DEMO.md` — 3-minute script + fallback-to-mocks instructions
+- Next: layout of all panels (React UI — being built elsewhere); additional fixtures for conflicting findings, low-confidence run, budget-exhausted partial plan, injection-flagged source, 2 more golden companies (SaaS, manufacturing); failure-injection cases in e2e (Tavily outage, malformed finding, killed process)
 - Blockers:
