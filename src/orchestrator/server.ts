@@ -180,13 +180,18 @@ async function supervise(port: number) {
 		const chunks: Buffer[] = []
 		req.on("data", (c: Buffer) => chunks.push(c))
 		req.on("end", () => forward(req, Buffer.concat(chunks), res))
-	}).listen(port, "127.0.0.1", () => console.log(`orchestrator API on http://localhost:${port}`))
+	}).listen(port, PUBLIC_HOST, () => console.log(`orchestrator API on http://localhost:${port}`))
 	process.on("exit", () => worker?.kill())
 }
 
+// Localhost only by default: no auth, and every run spends the team's LLM budget. HOST=0.0.0.0 is for running
+// inside a container, where "localhost" is the container's own private network namespace, unreachable from
+// other containers (e.g. the dashboard's nginx proxy) even with a published port; nothing outside the compose
+// network can reach it unless that port is also published to the host.
+const PUBLIC_HOST = process.env.HOST ?? "127.0.0.1"
+
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
 	const port = Number(process.env.PORT ?? 8787)
-	// Localhost only: no auth, and every run spends the team's LLM budget.
-	if (process.env.SWARM_WORKER) createServer(handle).listen(port, "127.0.0.1")
+	if (process.env.SWARM_WORKER) createServer(handle).listen(port, PUBLIC_HOST)
 	else void supervise(port)
 }

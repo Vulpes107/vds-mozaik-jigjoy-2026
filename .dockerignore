@@ -1,0 +1,7 @@
+node_modules
+data
+*.log
+.env
+.git
+docs
+e2e
