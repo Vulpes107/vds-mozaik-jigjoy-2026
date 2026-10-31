@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
-import sample from "../../../mocks/company_profile.sample.json"
 import { startRun, stopRun } from "../api.ts"
 import { check, clean, loadDraft, recommend, RECOMMENDED, saveDraft, sizeSlots, type Intake as IntakeT } from "../intake.ts"
 import type { CompanyProfile } from "../types/contracts.ts"
 
 type Product = CompanyProfile["products"][number]
 const STAGES: NonNullable<Product["stage"]>[] = ["idea", "prototype", "launched", "growth", "mature", "declining"]
-const fromSample = (): IntakeT => ({ profile: { ...(structuredClone(sample) as CompanyProfile), run_budget: { ...RECOMMENDED } }, auto_approve: false })
+const blank = (): IntakeT => ({ profile: { schema_version: "1.0", name: "", description: "", products: [{ name: "", description: "" }], run_budget: { ...RECOMMENDED } }, auto_approve: false })
 const num = (s: string) => (s === "" ? undefined : Number(s))
 const lines = (s: string) => s.split("\n")
 const commas = (s: string) => s.split(",").map((x) => x.trim())
 
 /** Intake form: company profile + run limits; the swarm size follows from the limits. Validated locally, then by the server; the draft is kept in localStorage. */
 export function Intake() {
-	const [i, setI] = useState<IntakeT>(() => loadDraft() ?? fromSample())
+	const [i, setI] = useState<IntakeT>(() => loadDraft() ?? blank())
 	const [report, setReport] = useState<{ errors: string[]; warnings: string[] }>()
 	const [serverErr, setServerErr] = useState<string>()
 	const [blocking, setBlocking] = useState<string>() // id of the in-progress run the server refused to replace
@@ -156,7 +155,7 @@ export function Intake() {
 			)}
 			<p className="row">
 				<button type="submit" className="btn primary" disabled={busy}>{busy ? "Starting…" : "Start run"}</button>
-				<button type="button" className="btn" onClick={() => { setI(fromSample()); setReport(undefined) }}>Reset to example</button>
+				<button type="button" className="btn" onClick={() => { setI(blank()); setReport(undefined) }}>Clear form</button>
 			</p>
 		</form>
 	)

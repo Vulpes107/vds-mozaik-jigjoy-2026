@@ -9,7 +9,6 @@ import { createServer } from "node:http"
 import { readFileSync, readdirSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { createDemo } from "./demo.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..")
 const mockDir = join(root, "mocks")
@@ -92,14 +91,9 @@ function scheduleReplay() {
 		}, Math.max(0, offsetMs))
 	}
 }
-// MOCK_DEMO=1: a scripted ~90 s run (Start run -> Approve -> drop + reassign -> plan -> editable assumptions). See docs/DEMO.md.
-const demo = process.env.MOCK_DEMO
-	? createDemo({ topics, findings, sources, assumptions, scenarios, checkpoints, agentEvents, broadcast, setPlan: (p) => { plan = p }, profile })
-	: undefined
-if (!demo) scheduleReplay()
+scheduleReplay()
 
 function runStatus() {
-	if (demo) return demo.status()
 	if (plan) return "done"
 	if ([...checkpoints.values()].some((c) => c.status === "pending")) return "awaiting_checkpoint"
 	return "researching"
@@ -123,11 +117,10 @@ function handle(req, res) {
 
 		if (req.method === "POST" && parts.length === 1 && parts[0] === "runs") {
 			await readBody(req) // drain; mock server always serves the one fixed demo run
-			demo?.reset() // demo mode: every "Start run" begins a fresh scripted run
 			return json(res, 201, { run_id: RUN_ID })
 		}
 		if (req.method === "GET" && parts.length === 1 && parts[0] === "runs") {
-			return json(res, 200, [{ run_id: RUN_ID, project_id: profile.project_id ?? null, company: profile.name ?? null, status: runStatus(), saved_at: new Date().toISOString(), spent_usd: demo ? demo.spent().usd : 0.4 }])
+			return json(res, 200, [{ run_id: RUN_ID, project_id: profile.project_id ?? null, company: profile.name ?? null, status: runStatus(), saved_at: new Date().toISOString(), spent_usd: 0.4 }])
 		}
 		if (parts[0] !== "runs" || parts[1] !== RUN_ID) return json(res, 404, { error: "not found" })
 		const rest = parts.slice(2)
@@ -140,7 +133,7 @@ function handle(req, res) {
 				status: runStatus(),
 				profile,
 				budget: { usd: 2, seconds: 1800 },
-				spent: demo ? demo.spent() : { usd: 0.4, seconds: 300 },
+				spent: { usd: 0.4, seconds: 300 },
 				topics: topics.size,
 				checkpoints: [...checkpoints.values()],
 			})
@@ -156,7 +149,6 @@ function handle(req, res) {
 			const b = await readBody(req)
 			if (b.value !== null && typeof b.value !== "number") return json(res, 400, { error: "body must be { value: number | null }" })
 			a.user_override = b.value ?? null
-			demo?.onOverride()
 			return json(res, 202, { assumption_id: rest[1], value: a.user_override })
 		}
 		if (req.method === "GET" && rest[0] === "scenarios") return json(res, 200, [...scenarios.values()])
@@ -166,7 +158,6 @@ function handle(req, res) {
 			if (!cp) return json(res, 404, { error: "no pending checkpoint with that id" })
 			const b = await readBody(req)
 			cp.status = b.approved === false ? "rejected" : "approved"
-			if (cp.status === "approved") demo?.start()
 			return json(res, 200, cp)
 		}
 		if (req.method === "GET" && rest[0] === "events") {
@@ -193,7 +184,7 @@ function handle(req, res) {
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
 	const port = Number(process.env.PORT ?? 8787)
 	createServer(handle).listen(port, "127.0.0.1", () => {
-		console.log(`mock dashboard API on http://localhost:${port} (run ${RUN_ID}, ${demo ? "scripted demo, press Approve to start" : `replay speed x${SPEED}`})`)
+		console.log(`mock dashboard API on http://localhost:${port} (run ${RUN_ID}, replay speed x${SPEED})`)
 	})
 }
 
