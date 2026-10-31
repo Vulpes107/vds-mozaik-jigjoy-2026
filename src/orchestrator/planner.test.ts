@@ -46,8 +46,9 @@ test("submit_topics validates against the contract and writes the board", async 
 test("topicCap: the research share of money and time, and the collector/analyst/verifier trios, bound the agenda", () => {
 	const slot = (role: Slot["role"]): Slot => ({ role, topicId: null, assignedAt: 0, reassignments: 0 })
 	const one = [slot("scout"), slot("scout"), slot("collector"), slot("analyst"), slot("verifier")]
-	assert.equal(topicCap({ usd: 3, seconds: 900 }, one), 3) // 2.25 USD / 0.6 = 3; 660 s / 360 = 1 trio-topic -> floor of 3
-	assert.equal(topicCap({ usd: 10, seconds: 3600 }, [...one, slot("collector"), slot("analyst"), slot("verifier")]), 12) // money: 7.5/0.6 = 12; time: 7 x 2 trios = 14
+	assert.equal(topicCap({ usd: 3, seconds: 900 }, one), 4) // money: 2.25 USD / 0.45 = 5; time: 660 s / 150 = 4 trio-topics
+	assert.equal(topicCap({ usd: 6, seconds: 3600 }, one), 10) // money: 4.5/0.45 = 10; time: 2700/150 = 18
+	assert.equal(topicCap({ usd: 1, seconds: 300 }, one), 3) // floor of 3
 	assert.equal(topicCap({ usd: 100, seconds: 36_000 }, one), MAX_TOPICS)
 	assert.equal(topicCap({}, one), MAX_TOPICS)
 })

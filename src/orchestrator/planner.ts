@@ -17,8 +17,9 @@ export const CATEGORIES = [
 // Absolute bounds; the run's budget narrows them (topicCap).
 export const MIN_TOPICS = 10
 export const MAX_TOPICS = 15
-/** Measured on the 2026-10-31 live run (Haiku workers): one deep topic costs about 0.6 USD and 6 min of a collector+analyst+verifier trio. */
-export const DEEP_TOPIC_COST = { usd: 0.6, seconds: 360 }
+/** Planning estimate per deep topic (collector+analyst+verifier trio). Live runs on 2026-10-31 (Haiku workers) measured ~0.6 USD / 6 min
+ * when 13 topics overran, then ~0.3 USD / ~1 min when 3 topics finished with staged roles; this sits conservatively between. */
+export const DEEP_TOPIC_COST = { usd: 0.45, seconds: 150 }
 
 /** How many topics the research share of the budget can take to completion; never below 3 so a plan has something to stand on. */
 export function topicCap(budget: Budget, slots: Iterable<Slot>, cfg: AllocatorConfig = defaultConfig): number {
