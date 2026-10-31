@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs"
 import { SemanticEvent, SituationSpecification, createHuman } from "@mozaik-ai/core"
 import { EV } from "../shared/events.ts"
 import { type Obj, join, sendEvent, startRuntime } from "../shared/runtime.ts"
-import { startResearch, tavilyProviders } from "./index.ts"
+import { startResearch, tavilyWithParallelFallback } from "./index.ts"
 
 const mock = (name: string) => JSON.parse(readFileSync(new URL(`../../mocks/${name}`, import.meta.url), "utf8"))
 
@@ -22,8 +22,9 @@ const topic: Obj = { ...topics[Number(process.argv[2] ?? 0)]!, state: "deep" }
 state.topics.set(topic.id, topic)
 state.runBudget = { calls: 60 }
 
-const { search, fetch, extras } = tavilyProviders()
-const system = startResearch({ state, searchProviders: [search], fetchProviders: [fetch], extras, slots: ["slot_1"] })
+// Parallel's accountless Search MCP backs up Tavily if it's rate-limited (no PARALLEL_API_KEY needed).
+const { searchProviders, fetchProviders, extras } = tavilyWithParallelFallback()
+const system = startResearch({ state, searchProviders, fetchProviders, extras, slots: ["slot_1"] })
 
 const done = new Map<string, (p: Record<string, unknown>) => void>()
 class All extends SituationSpecification {
