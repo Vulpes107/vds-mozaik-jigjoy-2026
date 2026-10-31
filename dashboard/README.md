@@ -9,7 +9,17 @@ npm run dev         # http://localhost:5173   (?run=<id> to pick a run, ?ro=1 fo
 npm run gen:types   # regenerate src/types/contracts.ts from ../contracts (never hand-edit it)
 npm test            # derivation tests (allocation replay, cash curve, scenario grouping)
 ```
-`VITE_API_URL` and `VITE_RUN_ID` override the API base and run id.
+Against the real orchestrator (from the repo root, in the devcontainer):
+
+```bash
+node --env-file=.env --import tsx src/orchestrator/server.ts   # A's API on :8787
+cd dashboard && npm run dev                                     # proxies /runs to :8787
+```
+With no `?run=`, the page is the landing page: the intake form (profile, research limits; worker slots are sized from the limits; validated, with recommendations,
+draft kept in `localStorage`) and the list of previous runs from `GET /runs`. **Start run** posts to `POST /runs` and opens `?run=<id>`.
+A run page has **New run** (back to the landing page) and **Stop run**; a run that is not live on the server opens read-only from its snapshot.
+The dev server proxies `/runs` so the browser never makes a cross-origin call (`API_URL` picks another backend for the proxy).
+`VITE_API_URL` and `VITE_RUN_ID` override the API base and run id in the built page.
 
 ## Page order
 Follows the reader's questions: verdict and key figures -> what to do -> can we afford it -> what could go wrong -> how sure are we -> who did the work -> proof -> export. While a run has no plan yet, live agent work and research lead instead. Every chart sits beside a "What you are looking at" column and a "What it shows right now" column; the second is generated from the data (`derive.ts`), so it cannot drift from the chart.
@@ -22,4 +32,5 @@ Editorial and typographic: Fraunces (display), Instrument Sans (UI), IBM Plex Mo
 - Editing an assumption posts `{value}` and refetches; the recompute is the server's (C's engine), so figures update after the round trip, not in the browser.
 - The cash curve is reconstructed from yearly totals and tranche releases; the engine's `min_cash_balance` is authoritative.
 - The mock server replays only two events, so the allocation view shows a single reassignment.
-- 390 px was checked in an iframe, not a real phone. Not yet exercised against A's real server.
+- 390 px was checked in an iframe, not a real phone.
+- Against A's real server only the REST/SSE plumbing was exercised (run list, start, summary, 409, stream) with the planner and research switched off; no full LLM run through the UI yet.

@@ -146,7 +146,7 @@ function CashChart({ scenarios, opening }: { scenarios: Scenario[]; opening: num
 	)
 }
 
-function EditorRow({ a, onChange, onFocusFindings }: { a: Assumption; onChange: (id: string, v: number | null) => void; onFocusFindings: (ids: string[]) => void }) {
+function EditorRow({ a, onChange, onFocusFindings, readOnly }: { a: Assumption; onChange: (id: string, v: number | null) => void; onFocusFindings: (ids: string[]) => void; readOnly: boolean }) {
 	const [v, setV] = useState(effective(a))
 	const t = useRef<number>()
 	useEffect(() => setV(effective(a)), [a.user_override, a.base])
@@ -168,7 +168,7 @@ function EditorRow({ a, onChange, onFocusFindings }: { a: Assumption; onChange: 
 				</span>
 			</div>
 			<div>
-				<input type="range" min={a.low} max={a.high} step={step} value={v} disabled={READ_ONLY} onChange={(e) => commit(Number(e.target.value))} aria-label={`${a.text} (${a.unit})`} aria-valuetext={`${v.toPrecision(3)} ${a.unit}`} />
+				<input type="range" min={a.low} max={a.high} step={step} value={v} disabled={readOnly} onChange={(e) => commit(Number(e.target.value))} aria-label={`${a.text} (${a.unit})`} aria-valuetext={`${v.toPrecision(3)} ${a.unit}`} />
 				<div className="vals"><span>{a.low}</span><span>base {a.base}</span><span>{a.high}</span></div>
 			</div>
 			<div className="cur">
@@ -176,7 +176,7 @@ function EditorRow({ a, onChange, onFocusFindings }: { a: Assumption; onChange: 
 				{pinned && (
 					<>
 						<span className="pin">Pinned by you</span>
-						{!READ_ONLY && <button className="btn link" onClick={() => onChange(a.id, null)}>Reset to {a.base}</button>}
+						{!readOnly && <button className="btn link" onClick={() => onChange(a.id, null)}>Reset to {a.base}</button>}
 					</>
 				)}
 			</div>
@@ -184,7 +184,8 @@ function EditorRow({ a, onChange, onFocusFindings }: { a: Assumption; onChange: 
 	)
 }
 
-export function Financials({ scenarios, assumptions, opening, onOverride, onFocusFindings }: { scenarios: Scenario[]; assumptions: Assumption[]; opening?: number; onOverride: (id: string, v: number | null) => void; onFocusFindings: (ids: string[]) => void }) {
+/** `readOnly`: the share view, or an archived run (not live on the server). */
+export function Financials({ scenarios, assumptions, opening, onOverride, onFocusFindings, readOnly = READ_ONLY }: { scenarios: Scenario[]; assumptions: Assumption[]; opening?: number; onOverride: (id: string, v: number | null) => void; onFocusFindings: (ids: string[]) => void; readOnly?: boolean }) {
 	const sorted = [...assumptions].sort((a, b) => (a.sensitivity_rank ?? 99) - (b.sensitivity_rank ?? 99))
 	const pinned = assumptions.filter(isPinned).length
 	return (
@@ -197,9 +198,9 @@ export function Financials({ scenarios, assumptions, opening, onOverride, onFocu
 			)}
 			<figure className="fig">
 				<div className="fig-main">
-					<h3 className="fig-t">Assumptions you can change</h3>
+					<h3 className="fig-t">Assumptions{readOnly ? " (read-only)" : " you can change"}</h3>
 					<p className="fig-q">What if the numbers behind the plan are wrong?</p>
-					{sorted.length === 0 ? <p className="note">No assumptions yet.</p> : sorted.map((a) => <EditorRow key={a.id} a={a} onChange={onOverride} onFocusFindings={onFocusFindings} />)}
+					{sorted.length === 0 ? <p className="note">No assumptions yet.</p> : sorted.map((a) => <EditorRow key={a.id} a={a} onChange={onOverride} onFocusFindings={onFocusFindings} readOnly={readOnly} />)}
 				</div>
 				<figcaption className="fig-aside">
 					<h4>How to use it</h4>

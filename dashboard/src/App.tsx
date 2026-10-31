@@ -5,41 +5,47 @@ import { Evidence } from "./components/Evidence.tsx"
 import { Export } from "./components/Export.tsx"
 import { Financials } from "./components/Financials.tsx"
 import { Header } from "./components/Header.tsx"
+import { Intake } from "./components/Intake.tsx"
 import { Recommendation } from "./components/Recommendation.tsx"
+import { RunList } from "./components/RunList.tsx"
 import { Research } from "./components/Research.tsx"
 import { Risks } from "./components/Risks.tsx"
 import { Verdict } from "./components/Verdict.tsx"
 import { LOW_CONFIDENCE } from "./derive.ts"
 import { Banner } from "./ui.tsx"
 
-export function App() {
+/** `/` is the landing page (intake form + previous runs); `?run=<id>` opens one run. */
+export const App = () => (RUN_ID ? <RunPage /> : <Landing />)
+
+function Landing() {
+	return (
+		<main className="landing">
+			<div>
+				<div className="brand">Strategy Swarm</div>
+				<h1>New research run</h1>
+				<p className="lede">Describe the company and set the limits. The swarm plans topics, asks for your approval, researches, and costs a plan.</p>
+				{READ_ONLY ? <p className="note">Read-only view: starting runs is disabled.</p> : <Intake />}
+			</div>
+			<aside>
+				<RunList />
+			</aside>
+		</main>
+	)
+}
+
+function RunPage() {
 	const { data, overrideAssumption, resolveCheckpoint, reload } = useRun()
 	const [focus, setFocus] = useState<string[]>([])
 	const { run, plan, conn } = data
 
-	if (!run) {
-		return (
-			<main className="empty">
-				{conn === "loading" ? (
-					<>
-						<h1>Loading run {RUN_ID}</h1>
-						<div className="skeleton" /><div className="skeleton" style={{ maxWidth: "40%" }} />
-					</>
-				) : (
-					<>
-						<h1>No run to show</h1>
-						<p className="lede">Could not reach the API at <code>{API}</code>{data.error ? ` (${data.error})` : ""}. Start the mock server and reload:</p>
-						<pre>npm run mock{"\n"}npm run dev</pre>
-						<p style={{ marginTop: 16 }}><button className="btn primary" onClick={() => void reload()}>Try again</button></p>
-					</>
-				)}
-			</main>
-		)
-	}
+	if (!run) return <Empty conn={conn} error={data.error} reload={reload} />
+	const ro = READ_ONLY || run.live === false
 
 	const pending = (run.checkpoints ?? []).filter((c) => c.status === "pending")
 	const soft = plan?.overall_confidence !== undefined && plan.overall_confidence < LOW_CONFIDENCE
 	const failed = run.status === "failed"
+	const stopped = run.status === "stopped"
+	const stopReason = data.events.find((e) => e.type === "run_completed")?.detail
 	const partial = plan && ((plan.unresolved_topic_ids?.length ?? 0) > 0 || run.status === "budget_exhausted")
 
 	// Reading order follows the reader's questions: what should I do -> can I afford it -> what can go wrong ->
@@ -58,10 +64,16 @@ export function App() {
 			</nav>
 			{conn === "reconnecting" && <Banner kind="warn" title="Connection lost">Showing the last data received. Reconnecting; missed events are replayed automatically.</Banner>}
 			{failed && <Banner kind="crit" title="Run failed">The run stopped before a plan could be produced. Partial research below is still valid.</Banner>}
+			{stopped && !plan && (
+				<Banner kind="warn" title="Run stopped">
+					This run ended before a plan was produced. The research below is what it had found.
+					{stopReason && <pre className="reason">{stopReason}</pre>}
+				</Banner>
+			)}
 			{pending.map((c) => (
 				<Banner key={c.id} kind="info" title="Your approval is needed">
-					<p>The swarm is waiting for you to approve the {c.kind === "topics" ? "list of research topics and the budget" : c.kind} before it spends anything.</p>
-					{!READ_ONLY && (
+					<p>The swarm is waiting for you to approve the {c.kind === "topics" || c.kind === "approve_topics" ? "list of research topics and the budget" : c.kind} before it spends anything.</p>
+					{!ro && (
 						<div className="row">
 							<button className="btn primary" onClick={() => void resolveCheckpoint(c.id, true)}>Approve</button>
 							<button className="btn" onClick={() => void resolveCheckpoint(c.id, false)}>Reject</button>
@@ -76,7 +88,7 @@ export function App() {
 			{plan && (
 				<>
 					<Recommendation plan={plan} scenarios={data.scenarios} findings={data.findings} assumptions={data.assumptions} />
-					<Financials scenarios={data.scenarios} assumptions={data.assumptions} opening={run.profile?.financials?.cash_on_hand} onOverride={(id, v) => void overrideAssumption(id, v)} onFocusFindings={(ids) => { setFocus(ids); document.getElementById("evidence")?.scrollIntoView({ behavior: "smooth" }) }} />
+					<Financials scenarios={data.scenarios} assumptions={data.assumptions} opening={run.profile?.financials?.cash_on_hand} onOverride={(id, v) => void overrideAssumption(id, v)} readOnly={ro} onFocusFindings={(ids) => { setFocus(ids); document.getElementById("evidence")?.scrollIntoView({ behavior: "smooth" }) }} />
 					<Risks plan={plan} />
 					{research}
 					{activity}
@@ -84,6 +96,29 @@ export function App() {
 			)}
 			<Evidence findings={data.findings} sources={data.sources} focus={focus} />
 			<Export plan={plan} scenarios={data.scenarios} assumptions={data.assumptions} findings={data.findings} />
+		</main>
+	)
+}
+
+/** The run could not be loaded: offline, or the server does not know that id. */
+function Empty({ conn, error, reload }: { conn: string; error?: string; reload: () => Promise<void> }) {
+	if (conn === "loading") {
+		return (
+			<main className="empty">
+				<h1>Loading run {RUN_ID}</h1>
+				<div className="skeleton" /><div className="skeleton" style={{ maxWidth: "40%" }} />
+			</main>
+		)
+	}
+	return (
+		<main className="empty">
+			<h1>No run to show</h1>
+			<p className="lede">API <code>{API || location.origin}</code>{error ? `: ${error}` : ""}. Start the orchestrator (or the mock) and retry, or go back and start a new run.</p>
+			<pre>node --env-file=.env --import tsx src/orchestrator/server.ts{"\n"}npm run dev</pre>
+			<p className="row" style={{ marginTop: 16 }}>
+				<button className="btn" onClick={() => void reload()}>Try again</button>
+				<a className="btn primary" href={location.pathname}>New run</a>
+			</p>
 		</main>
 	)
 }

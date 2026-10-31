@@ -2,7 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { EV } from "../shared/events.ts"
 import type { Slot } from "../shared/runtime.ts"
-import { allocate, defaultConfig, type Action, type Board, type Topic } from "./allocator.ts"
+import { allocate, researchBudget, researchLimit, defaultConfig, type Action, type Board, type Topic } from "./allocator.ts"
 
 function board(topics: Partial<Topic>[], slots: Record<string, Slot["role"]>, runBudget = {}): Board {
 	return {
@@ -45,6 +45,13 @@ test("gate: shallow vs deep, and roles needed per state", () => {
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.8, impact: 0.7, rationale: "" } }, cfg, 3)
 	assert.equal(b.topics.get("t_2")!.state, "deep")
 	assert.equal(b.slots.get("c1")!.topicId, "t_2")
+	assert.equal(b.slots.get("v1")!.topicId, null) // deep work is staged: the verifier waits for findings to check
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "an1", role: "analyst", outcome: "done", findings: 1, sources: 0 } }, cfg, 4)
+	assert.equal(b.slots.get("an1")!.topicId, null) // free, but t_2's collector has not delivered yet
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_2", slotId: "c1", role: "collector", outcome: "done", findings: 0, sources: 3 } }, cfg, 5)
+	assert.equal(b.slots.get("an1")!.topicId, "t_2") // the analyst gets the collector's material
+	assert.equal(b.slots.get("v1")!.topicId, null)
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_2", slotId: "an1", role: "analyst", outcome: "done", findings: 2, sources: 0 } }, cfg, 6)
 	assert.equal(b.slots.get("v1")!.topicId, "t_2")
 })
 
@@ -116,11 +123,14 @@ test("close early on high confidence, but a deep topic waits for its verifier", 
 	assert.equal(b.topics.get("t_1")!.state, "closed")
 })
 
-test("research gap marks the topic research_incomplete and frees the slot", () => {
+test("a research gap is a reason, not a verdict: the topic ends only when the task finishes with nothing and nobody else is on it", () => {
 	const b = board([{ id: "t_1" }, { id: "t_2" }], { s1: "scout", c1: "collector" })
 	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
-	const a = allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_1", slotId: "c1", reason: "provider outage" } }, cfg, 2)
+	allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_1", slotId: "c1", reason: "provider outage" } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.state, "deep") // the collector is still working; one failed call need not end the topic
+	assert.equal(b.slots.get("c1")!.topicId, "t_1")
+	const a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "c1", role: "collector", outcome: "done", findings: 0, sources: 0 } }, cfg, 3)
 	assert.equal(b.topics.get("t_1")!.state, "research_incomplete")
 	assert.equal(b.topics.get("t_1")!.state_reason, "provider outage")
 	assert.equal(b.slots.get("c1")!.topicId, null)
@@ -207,6 +217,41 @@ test("tick: stuck slots time out, wall-clock counts against the budget, unservab
 	assert.ok(a.some((x) => x.type === EV.BudgetExhausted))
 })
 
+test("research stops at its share of the budget; the rest is reserved for analysis", () => {
+	assert.equal(researchLimit("usd", 3), 2.25) // max(0.75, 0.75)
+	assert.equal(researchLimit("usd", 1), 0.5) // never more than half
+	assert.equal(researchLimit("usd", 10), 7.5) // fraction wins on big budgets
+	assert.equal(researchLimit("seconds", 900), 660)
+	assert.equal(researchLimit("calls", 10), 10) // search calls are research-only
+	assert.deepEqual(researchBudget({ usd: 3, seconds: 900 }), { usd: 2.25, seconds: 660 })
+	const b = board([{ id: "t_1" }], { s1: "scout" }, { usd: 3 })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	const a = allocate(b, { type: EV.SpendRecorded, payload: { agentId: "x", model: "m", tokens: 1, usd: 2.3 } }, cfg, 1)
+	const ex = a.find((x) => x.type === EV.BudgetExhausted) as Extract<Action, { type: typeof EV.BudgetExhausted }>
+	assert.deepEqual({ limit: ex.limit, reserved: ex.reserved }, { limit: 2.25, reserved: 0.75 })
+	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
+})
+
+test("the clock stops once the plan is ready", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout" }, { seconds: 900 })
+	b.startedAt = 0
+	allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, 10_000)
+	assert.equal(b.spent.seconds, 10)
+	allocate(b, { type: EV.PlanReady, payload: {} }, cfg, 20_000)
+	allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, 60_000)
+	assert.equal(b.spent.seconds, 10)
+})
+
+test("a task that hit its own budget counts as finished (its findings stand); a timeout is retried", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	const a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "c1", role: "collector", outcome: "budget_exhausted", findings: 2, sources: 3 } }, cfg, 2)
+	assert.equal(b.topics.get("t_1")!.reassignment_count ?? 0, 0)
+	assert.equal(b.slots.get("c1")!.topicId, null) // collector done for this topic; nothing else to collect
+	assert.ok(!assigns(a).some((x) => x.slotId === "c1"))
+})
+
 test("a task that ends with a non-done outcome is retried instead of counted as finished", () => {
 	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
 	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
@@ -230,7 +275,10 @@ test("a research gap keeps a topic that already has findings, and ends one that 
 	assert.equal(b.slots.get("c1")!.topicId, "t_1")
 	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 3)
 	allocate(b, { type: EV.ResearchGap, payload: { topicId: "t_2", slotId: "c1", reason: "provider outage" } }, cfg, 4)
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_2", slotId: "c1", role: "collector", outcome: "done", findings: 0, sources: 0 } }, cfg, 5)
 	assert.equal(b.topics.get("t_2")!.state, "research_incomplete")
+	allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "c1", role: "collector", outcome: "done", findings: 0, sources: 0 } }, cfg, 6)
+	assert.equal(b.topics.get("t_1")!.state, "deep") // it has findings: the analyst still gets its turn
 })
 
 test("a scout working through many topics is never retired", () => {
@@ -244,4 +292,12 @@ test("a scout working through many topics is never retired", () => {
 	}
 	assert.equal(b.slots.get("s1")!.reassignments, 0)
 	assert.equal([...b.topics.values()].filter((t) => t.state === "shallow").length, 12)
+})
+
+test("nothing is assigned before the human approves the topic list (a tick or spend event must not start research)", () => {
+	const b = board([{ id: "t_1", importance_prior: 0.9 }], { s1: "scout" })
+	assert.equal(assigns(allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, 1000)).length, 0)
+	assert.equal(assigns(allocate(b, { type: EV.SpendRecorded, payload: { tokens: 10, usd: 0.001 } }, cfg, 1000)).length, 0)
+	assert.equal(b.topics.get("t_1")!.state, "queued")
+	assert.equal(assigns(allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 2000)).length, 1)
 })

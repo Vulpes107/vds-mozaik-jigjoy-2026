@@ -66,6 +66,11 @@ export function overrideAssumption(assumptionId: string, value: number | null): 
 	sendEvent(SemanticEvent.create(EV.AssumptionOverridden, producerId, { assumptionId, value }), producerId)
 }
 
+/** Dashboard "stop": the run ends now; the snapshot records it as `stopped`. */
+export function stopRun(reason: string): void {
+	sendEvent(SemanticEvent.create(EV.RunCompleted, producerId, { reason }), producerId)
+}
+
 function tavilyAsProviders() {
 	const { search, fetch, extras } = tavilyProviders()
 	return { searchProviders: [search], fetchProviders: [fetch], extras }
@@ -79,7 +84,13 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 		let timer: NodeJS.Timeout | undefined
 		onAgentEvent(() => {
 			clearTimeout(timer)
-			timer = setTimeout(() => writeSnapshot(state, opts.snapshotDir ?? "data"), 200)
+			timer = setTimeout(() => {
+				try {
+					writeSnapshot(state, opts.snapshotDir ?? "data")
+				} catch (e) {
+					console.error(`snapshot of ${state.runId} failed (run continues, resume is not possible): ${String(e)}`) // e.g. a read-only data/mozaik.db
+				}
+			}, 200)
 			timer.unref()
 		})
 	}
@@ -101,7 +112,10 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 		rejectionHandlerInstalled = true
 		process.on("unhandledRejection", (e) => {
 			console.error("agent loop failed:", e)
-			sendEvent(SemanticEvent.create(EV.RunCompleted, cartographer.getId(), { reason: `agent loop failed: ${e instanceof Error ? e.message : String(e)}` }), cartographer.getId())
+			// Before topics exist only the Planner runs, so its failure ends the run. Afterwards it is one worker's loop
+			// (typically a retired agent's late transition: "Participant … not found" after a reassignment); the slot's
+			// own task timeout reassigns it, so the run goes on.
+			if (state.topics.size === 0) sendEvent(SemanticEvent.create(EV.RunCompleted, cartographer.getId(), { reason: `agent loop failed: ${e instanceof Error ? e.message : String(e)}` }), cartographer.getId())
 		})
 	}
 	if (opts.planner !== false) startPlanner()

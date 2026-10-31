@@ -6,10 +6,11 @@ import { SemanticEvent, createHuman } from "@mozaik-ai/core"
 import { EV } from "../shared/events.ts"
 import { join, sendEvent } from "../shared/runtime.ts"
 import { validate } from "../shared/validate.ts"
-import { handle } from "./server.ts"
+import { _resetForTests, handle } from "./server.ts"
 
 const profile = JSON.parse(readFileSync("mocks/company_profile.sample.json", "utf8"))
-const tick = () => new Promise((r) => setTimeout(r, 20))
+const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))
+let runId = ""
 
 test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async () => {
 	const server = createServer(handle)
@@ -20,12 +21,15 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 	let r = await api("/runs", { method: "POST", body: JSON.stringify({ profile, planner: false, research: false, slots: { scout: 1 } }) })
 	assert.equal(r.status, 201)
 	const { run_id } = (await r.json()) as { run_id: string }
+	runId = run_id
 	assert.equal((await api("/runs", { method: "POST", body: "{}" })).status, 409)
 	r = await api("/runs")
 	assert.equal(r.status, 200)
 	assert.ok(Array.isArray(await r.json()))
 	assert.equal((await api(`/runs/${run_id}/plan`)).status, 404)
-	assert.equal(((await (await api(`/runs/${run_id}`)).json()) as { status: string }).status, "planning")
+	const summary = (await (await api(`/runs/${run_id}`)).json()) as { status: string; profile: { name: string } }
+	assert.equal(summary.status, "planning")
+	assert.equal(summary.profile.name, (profile as { name: string }).name) // the dashboard header reads it
 
 	// Stand in for the Planner: put topics on the board and announce them.
 	const { resolveRuntime } = await import("../shared/runtime.ts")
@@ -81,5 +85,30 @@ test("API: start run, checkpoint, topics, SSE replay with Last-Event-ID", async 
 	await readUntil("event: agent_reassigned")
 	assert.ok(text.includes("event: topic_dropped"))
 	ac.abort()
+
+	// Stop: the run ends, the response asks the supervisor to swap the worker, and a new run is then refused by this worker with the same marker.
+	r = await api(`/runs/${run_id}/stop`, { method: "POST" })
+	assert.equal(r.status, 202)
+	assert.equal(r.headers.get("x-swarm-replace"), "1")
+	assert.equal(((await r.json()) as { status: string }).status, "stopped")
+	r = await api("/runs", { method: "POST", body: JSON.stringify({ profile }) })
+	assert.equal(r.status, 409)
+	assert.equal(r.headers.get("x-swarm-replace"), "1")
+	server.close()
+})
+
+test("API: a run that is not live is served read-only from its snapshot", async () => {
+	await tick(400) // debounced snapshot write
+	_resetForTests()
+	const server = createServer(handle)
+	await new Promise<void>((r) => server.listen(0, r))
+	const base = `http://localhost:${(server.address() as { port: number }).port}`
+	const run = (await (await fetch(`${base}/runs/${runId}`)).json()) as { live: boolean; status: string; profile: { name: string } }
+	assert.equal(run.live, false)
+	assert.equal(run.status, "stopped")
+	assert.equal(run.profile.name, (profile as { name: string }).name)
+	assert.equal(((await (await fetch(`${base}/runs/${runId}/topics`)).json()) as unknown[]).length, 2)
+	assert.equal((await fetch(`${base}/runs/${runId}/assumptions/as_001`, { method: "POST", body: "{}" })).status, 409)
+	assert.equal((await fetch(`${base}/runs/r_nope`)).status, 404)
 	server.close()
 })

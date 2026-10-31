@@ -105,12 +105,16 @@ function handle(req, res) {
 			await readBody(req) // drain; mock server always serves the one fixed demo run
 			return json(res, 201, { run_id: RUN_ID })
 		}
+		if (req.method === "GET" && parts.length === 1 && parts[0] === "runs") {
+			return json(res, 200, [{ run_id: RUN_ID, project_id: profile.project_id ?? null, company: profile.name ?? null, status: runStatus(), saved_at: new Date().toISOString(), spent_usd: 0.4 }])
+		}
 		if (parts[0] !== "runs" || parts[1] !== RUN_ID) return json(res, 404, { error: "not found" })
 		const rest = parts.slice(2)
 
 		if (req.method === "GET" && rest.length === 0) {
 			return json(res, 200, {
 				run_id: RUN_ID,
+				live: true,
 				project_id: profile.project_id,
 				status: runStatus(),
 				profile,
@@ -124,6 +128,7 @@ function handle(req, res) {
 		if (req.method === "GET" && rest[0] === "findings") return json(res, 200, [...findings.values()])
 		if (req.method === "GET" && rest[0] === "sources") return json(res, 200, [...sources.values()])
 		if (req.method === "GET" && rest[0] === "assumptions") return json(res, 200, [...assumptions.values()])
+		if (req.method === "POST" && rest[0] === "stop") return json(res, 202, { run_id: RUN_ID, status: "stopped" })
 		if (req.method === "POST" && rest[0] === "assumptions" && rest[1]) {
 			const a = assumptions.get(rest[1])
 			if (!a) return json(res, 404, { error: "unknown assumption" })
