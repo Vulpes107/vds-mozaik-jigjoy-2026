@@ -10,21 +10,33 @@ export interface Breakpoint {
 	assumption_id: string
 	text: string
 	unit: string
-	/** Value at which the chosen option stops beating doing nothing. */
+	/** Value at which the chosen option and doing nothing swap places. */
 	value: number
 	base: number
+	/** "kills": the chosen plan stops beating doing nothing there. "enables": the best alternative starts beating doing nothing there. */
+	kind: "kills" | "enables"
+	/** The condition alone, e.g. "Monthly active users above 1,900 users (base 500)". */
+	condition: string
 	statement: string
+}
+
+export interface ProfileFacts {
+	financials?: { cash_on_hand?: number; monthly_burn?: number; annual_revenue?: number; investable_budget?: number } | undefined
+	countries?: string[] | undefined
 }
 
 export interface RedTeamInput {
 	chosen: { spec: CompiledSpec; base: Scenario; low?: Scenario }
 	baseline: { spec: CompiledSpec; base: Scenario }
+	/** Best option other than doing nothing, when the chosen one is doing nothing. */
+	alternative?: { spec: CompiledSpec; base: Scenario } | undefined
 	assumptions: readonly Assumption[]
-	/** Tornado rows for the chosen spec, most influential first. */
+	/** Every tornado row for the chosen (or alternative) spec, most influential first. */
 	tornado: readonly TornadoRow[]
-	profile?: { financials?: { cash_on_hand?: number; monthly_burn?: number } | undefined; countries?: string[] | undefined } | undefined
+	profile?: ProfileFacts | undefined
 	unresolvedTopicIds: readonly string[]
 	buildBuy: readonly TcoResult[]
+	investmentBase: number
 }
 
 export interface RedTeamResult {
@@ -36,6 +48,30 @@ export interface RedTeamResult {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US")
 const num = (n: number) => (Math.abs(n) >= 100 ? fmt(n) : String(round(n, 3)))
+
+/** One-at-a-time sweep over every assumption: where does the ranking against doing nothing flip? */
+export function sweepBreakpoints(plan: CompiledSpec, planName: string, baseline: CompiledSpec, assumptions: readonly Assumption[], tornado: readonly TornadoRow[], kind: Breakpoint["kind"]): Breakpoint[] {
+	const byId = new Map(assumptions.map((a) => [a.id, a]))
+	const out: Breakpoint[] = []
+	for (const row of tornado) {
+		const v = breakEvenValue(plan, baseline, assumptions, row.assumption_id)
+		if (v === null) continue
+		const a = byId.get(row.assumption_id)!
+		const base = a.user_override ?? a.base
+		const condition = `${a.text} ${v > base ? "above" : "below"} ${num(v)} ${a.unit} (base ${num(base)})`
+		out.push({
+			assumption_id: a.id,
+			text: a.text,
+			unit: a.unit,
+			value: round(v, 4),
+			base,
+			kind,
+			condition,
+			statement: kind === "kills" ? `${condition} makes doing nothing the better option.` : `"${planName}" beats doing nothing with ${condition}.`,
+		})
+	}
+	return out
+}
 
 export function redTeam(input: RedTeamInput): RedTeamResult {
 	const { chosen, baseline, assumptions, tornado } = input
@@ -75,24 +111,14 @@ export function redTeam(input: RedTeamInput): RedTeamResult {
 		})
 	}
 
-	// 2. Break points: which assumption, at what value, makes the chosen option lose to doing nothing.
-	const breakpoints: Breakpoint[] = []
-	if (chosen.base.kind !== "do_nothing") {
-		for (const row of tornado.slice(0, 3)) {
-			const v = breakEvenValue(chosen.spec, baseline.spec, assumptions, row.assumption_id)
-			if (v === null) continue
-			const a = byId.get(row.assumption_id)!
-			const base = a.user_override ?? a.base
-			const dir = v > base ? "above" : "below"
-			breakpoints.push({
-				assumption_id: a.id,
-				text: a.text,
-				unit: a.unit,
-				value: round(v, 4),
-				base,
-				statement: `${a.text} ${dir} ${num(v)} ${a.unit} (base ${num(base)}) makes doing nothing the better option.`,
-			})
-		}
+	// 2. Break points, swept over every assumption: what kills the chosen plan, or what would make the best alternative pay off.
+	const isBaseline = chosen.base.kind === "do_nothing"
+	const breakpoints = isBaseline
+		? input.alternative
+			? sweepBreakpoints(input.alternative.spec, input.alternative.base.name, baseline.spec, assumptions, tornado, "enables")
+			: []
+		: sweepBreakpoints(chosen.spec, chosen.base.name, baseline.spec, assumptions, tornado, "kills")
+	if (!isBaseline) {
 		if (breakpoints.length) {
 			risks.push({
 				id: "rk_fragilePlan",
@@ -113,6 +139,17 @@ export function redTeam(input: RedTeamInput): RedTeamResult {
 				severity: 0.7,
 				mitigation: "Define the exit trigger in advance and keep the first tranche small.",
 				finding_ids: basis(chosen.base.assumption_ids),
+			})
+		}
+		if (fin?.investable_budget !== undefined && input.investmentBase > fin.investable_budget) {
+			risks.push({
+				id: "rk_overBudget",
+				title: `Money needed (${fmt(input.investmentBase)} ${cur}) exceeds the stated investable budget (${fmt(fin.investable_budget)} ${cur})`,
+				category: "finance",
+				likelihood: 1,
+				severity: 0.7,
+				mitigation: "Cut the first tranche to the investable budget, or secure the difference (grant, partner, pre-orders) before starting.",
+				finding_ids: [],
 			})
 		}
 	}

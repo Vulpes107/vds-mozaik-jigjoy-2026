@@ -65,8 +65,10 @@ export function rankAssumptions(specs: readonly ScenarioSpec[], assumptions: rea
 }
 
 /**
- * Value of one assumption at which `chosen` stops beating `baseline` in NPV, searching between its base value and
- * its adverse bound for `chosen`. Null when the plan survives the whole range, or is already worse at base.
+ * Value of one assumption at which `chosen` and `baseline` swap places in NPV, every other assumption at base.
+ * When `chosen` wins at base the search runs toward its adverse bound (where does the plan stop paying off?);
+ * when it loses at base it runs toward the favourable bound (what would it take for the plan to pay off?).
+ * Null when the ranking holds across the assumption's whole range.
  */
 export function breakEvenValue(
 	chosen: CompiledSpec,
@@ -79,21 +81,22 @@ export function breakEvenValue(
 	if (!a || isPinned(a)) return null
 	const ids = [...new Set([...chosen.ids, ...baseline.ids])]
 	const base = valuesAt(ids, byId, "base")
-	const adverse = boundsFor(chosen, byId).get(assumptionId)?.pessimistic
-	if (adverse === undefined) return null
+	const b = boundsFor(chosen, byId).get(assumptionId)
+	if (!b) return null
 	const diff = (v: number) => {
 		const vals = { ...base, [assumptionId]: v }
 		return npvOf(chosen, vals) - npvOf(baseline, vals)
 	}
 	const d0 = diff(base[assumptionId] as number)
-	if (d0 <= 0) return null
-	if (diff(adverse) > 0) return null
-	let good = base[assumptionId] as number
-	let bad = adverse
+	const wins = d0 > 0
+	const far = wins ? b.pessimistic : b.optimistic
+	if ((diff(far) > 0) === wins) return null
+	let same = base[assumptionId] as number // side that keeps the base ranking
+	let flipped = far
 	for (let i = 0; i < 60; i++) {
-		const mid = (good + bad) / 2
-		if (diff(mid) > 0) good = mid
-		else bad = mid
+		const mid = (same + flipped) / 2
+		if ((diff(mid) > 0) === wins) same = mid
+		else flipped = mid
 	}
-	return (good + bad) / 2
+	return (same + flipped) / 2
 }

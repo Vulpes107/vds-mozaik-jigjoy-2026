@@ -1,9 +1,9 @@
 // Assembles the contract-shaped BusinessPlan. Every figure comes from the engine; the LLM may only supply prose
-// (executive summary text and recommendation wording), which is validated and then wrapped with the computed facts.
+// (executive summary text, recommendation wording, domain risks), which is validated and then wrapped with the computed facts.
 import { kindToOption, scoreOptions, sizeInvestment, type Appetite, type Decision, type Investment, type Option, type OptionInput } from "./decisions.ts"
 import { round } from "./finance.ts"
-import { redTeam, type Breakpoint } from "./redteam.ts"
-import { compileSpec, computeCompiled, indexAssumptions, type CompiledSpec } from "./scenario.ts"
+import { redTeam, type Breakpoint, type ProfileFacts } from "./redteam.ts"
+import { compileSpec, computeCompiled, indexAssumptions, isPinned, type CompiledSpec } from "./scenario.ts"
 import { tornado, type TornadoRow } from "./sensitivity.ts"
 import type { TcoResult } from "./tco.ts"
 import type { Assumption, Risk, Scenario, ScenarioSpec } from "./types.ts"
@@ -21,9 +21,22 @@ export interface Recommendation {
 	what_would_change_this?: string
 }
 
+export interface NarrativeRisk {
+	title: string
+	category?: string
+	likelihood: number
+	severity: number
+	mitigation: string
+	finding_ids?: string[]
+}
+
 export interface Narrative {
 	executive_summary?: string
 	recommendations?: Omit<Recommendation, "rank">[]
+	/** Must equal the engine's chosen scenario; the narrative is written for the engine's verdict, never against it. */
+	recommended_scenario_id?: string
+	/** Business risks the model sees in the findings (churn, discoverability, payout setup...); the engine adds the model-mechanical ones. */
+	risks?: NarrativeRisk[]
 }
 
 export interface BuildBuyInput extends TcoResult {
@@ -35,15 +48,11 @@ export interface PlanInput {
 	runId: string
 	projectId?: string
 	now: Date
-	profile?: {
-		risk_appetite?: Appetite
-		countries?: string[]
-		financials?: { cash_on_hand?: number; monthly_burn?: number }
-	}
+	profile?: ProfileFacts & { risk_appetite?: Appetite }
 	assumptions: readonly Assumption[]
 	specs: readonly ScenarioSpec[]
 	findings: readonly { id: string }[]
-	topics: readonly { id: string; state: string }[]
+	topics: readonly { id: string; state: string; title?: string }[]
 	buildBuy: readonly BuildBuyInput[]
 	narrative?: Narrative
 }
@@ -87,10 +96,16 @@ export interface PlanOutput {
 	tornado: TornadoRow[]
 	breakpoints: Breakpoint[]
 	decision: Decision
+	/** Assumptions that change no projection (unreferenced, or zero NPV swing everywhere). */
+	inert: Assumption[]
+	/** The computed facts in words: what the narrative must agree with. */
+	engineSummary: string
 }
 
 const UNRESOLVED_STATES = new Set(["queued", "scouting", "deep", "research_incomplete"])
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US")
+/** Judgement without a cited finding is capped here, whatever the model claims. */
+const JUDGEMENT_CAP = 0.4
 
 /** Confidence in the evidence behind the numbers, weighted by how much each assumption moves the result. Unfinished topics are disclosed, not penalised. */
 export function overallConfidence(assumptions: readonly Assumption[], weights: ReadonlyMap<string, number>, haveFindings: boolean): number {
@@ -134,6 +149,11 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 		rowsBySpec.set(c.cs.spec.id, rows)
 		for (const r of rows) weights.set(r.assumption_id, Math.max(weights.get(r.assumption_id) ?? 0, r.swing))
 	}
+	const tcoIds = new Set(input.buildBuy.flatMap((t) => t.assumption_ids))
+	const referenced = new Set([...compiled.flatMap((c) => c.ids), ...tcoIds])
+	// Unreferenced, or referenced with a range that moves no NPV (multiplied by zero, wrong branch of a min/max): listed and ignored.
+	// The company's own figures (origin user/default, seeded from the profile) are context, never reported as inert.
+	const inert = input.assumptions.filter((a) => a.origin !== "user" && a.origin !== "default" && (!referenced.has(a.id) || (!isPinned(a) && a.low !== a.high && !tcoIds.has(a.id) && !weights.get(a.id))))
 	const unresolved = input.topics.filter((t) => UNRESOLVED_STATES.has(t.state)).map((t) => t.id)
 	const dropped = input.topics.filter((t) => t.state === "dropped").map((t) => t.id)
 	const confidence = overallConfidence(input.assumptions, weights, input.findings.length > 0)
@@ -150,28 +170,50 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 	const decision = scoreOptions(optionInputs, input.profile?.risk_appetite ?? "medium", confidence)
 	const chosen = best.get(decision.verdict)!
 	const baseline = best.get("continue")!
-
-	const chosenRows = rowsBySpec.get(chosen.cs.spec.id) as TornadoRow[]
-	const rt = redTeam({
-		chosen: { spec: chosen.cs, base: chosen.base, low: chosen.low },
-		baseline: { spec: baseline.cs, base: baseline.base },
-		assumptions: input.assumptions,
-		tornado: chosenRows,
-		profile: input.profile,
-		unresolvedTopicIds: unresolved,
-		buildBuy: input.buildBuy,
-	})
+	const isBaseline = chosen === baseline
+	const alternative = isBaseline ? [...best.values()].filter((c) => c !== baseline).sort((a, b) => b.base.metrics.npv - a.base.metrics.npv)[0] : undefined
 
 	const investment =
 		decision.verdict === "continue"
 			? { currency: chosen.base.currency, low: 0, base: 0, high: 0, staged: false, rationale: "No new capital is required to continue as is." }
 			: sizeInvestment(chosen.base, chosen.low, chosen.high)
 
+	const sweptRows = rowsBySpec.get((alternative ?? chosen).cs.spec.id) as TornadoRow[]
+	const rt = redTeam({
+		chosen: { spec: chosen.cs, base: chosen.base, low: chosen.low },
+		baseline: { spec: baseline.cs, base: baseline.base },
+		alternative: alternative ? { spec: alternative.cs, base: alternative.base } : undefined,
+		assumptions: input.assumptions,
+		tornado: sweptRows,
+		profile: input.profile,
+		unresolvedTopicIds: unresolved,
+		buildBuy: input.buildBuy,
+		investmentBase: investment.base,
+	})
+	const kills = rt.breakpoints.filter((b) => b.kind === "kills").map((b) => b.statement)
+	const changeNote =
+		rt.breakpoints[0]?.statement ??
+		"No single assumption, moved alone across its full low-high range, changes which option has the higher value."
+
+	// The narrative must be written for the engine's choice.
+	const cur = chosen.base.currency
+	const gain = (c: (typeof cases)[number]) => ({ base: c.base.metrics.npv - baseline.base.metrics.npv, low: c.low.metrics.npv - baseline.low.metrics.npv, high: c.high.metrics.npv - baseline.high.metrics.npv })
+	const gainLine = (name: string, g: ReturnType<typeof gain>) => `${name}: ${fmt(g.base)} ${cur} over doing nothing in the base case (adverse ${fmt(g.low)}, favourable ${fmt(g.high)}, each against doing nothing in the same case).`
+	const fin = input.profile?.financials
+	const ranking = decision.ranked.map((r) => `${r.option} ${r.score} (${best.get(r.option)!.base.name}, ${r.scenario_id})`).join("; ")
+	const engineSummary = [
+		`Engine result: ${decision.verdict}, scenario "${chosen.base.name}" (${chosen.base.id}). Ranking: ${ranking}.`,
+		isBaseline ? (alternative ? gainLine(`Best alternative "${alternative.base.name}"`, gain(alternative)) : "No alternative to doing nothing was modelled") : gainLine(`"${chosen.base.name}"`, gain(chosen)),
+		`Money needed: ${fmt(investment.base)} ${cur} (range ${fmt(investment.low)} to ${fmt(investment.high)})${fin?.investable_budget !== undefined ? ` against a stated investable budget of ${fmt(fin.investable_budget)} ${cur}` : "; no investable budget was stated"}.`,
+		changeNote,
+	].join(" ")
+	if (input.narrative?.recommended_scenario_id && input.narrative.recommended_scenario_id !== chosen.base.id) {
+		throw new Error(`The engine ranks "${chosen.base.name}" (${chosen.base.id}) first, not ${input.narrative.recommended_scenario_id}. ${engineSummary} Write the narrative for the engine's choice; the other option may only be recommended as conditional on the stated break-even.`)
+	}
+
 	// Recommendations: model prose (validated) or a deterministic fallback; liquidity always leads.
 	const knownFindings = new Set(input.findings.map((f) => f.id))
 	const chosenBasis = [...new Set(chosen.base.assumption_ids.flatMap((id) => (byId.get(id)?.basis_finding_ids ?? []).filter((f) => knownFindings.has(f))))]
-	const changeNote =
-		rt.breakpoints[0]?.statement ?? "No single key assumption reverses this recommendation within its modelled range."
 	const recs: Omit<Recommendation, "rank">[] = []
 	if (rt.liquidityWarning) {
 		recs.push({
@@ -188,7 +230,8 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 		for (const r of input.narrative.recommendations) {
 			const unknown = r.finding_ids.filter((f) => !knownFindings.has(f))
 			if (unknown.length) throw new Error(`Recommendation "${r.title}" cites unknown finding ids: ${unknown.join(", ")}`)
-			recs.push(r)
+			// Without a finding behind it, a recommendation is the model's judgement and is labelled and capped as such.
+			recs.push(r.finding_ids.length ? r : { ...r, confidence: Math.min(r.confidence, JUDGEMENT_CAP), rationale: `Judgement, no finding cited: ${r.rationale}` })
 		}
 	} else {
 		const titles: Record<Option, string> = {
@@ -200,7 +243,7 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 		}
 		recs.push({
 			title: titles[decision.verdict],
-			rationale: `${decision.rationale} Base-case NPV ${fmt(chosen.base.metrics.npv)} ${chosen.base.currency} versus ${fmt(baseline.base.metrics.npv)} for continuing.`,
+			rationale: `${decision.rationale} ${engineSummary}`,
 			category: "strategy",
 			confidence,
 			finding_ids: chosenBasis,
@@ -220,38 +263,50 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 	}
 	const recommendations: Recommendation[] = recs.map((r, i) => ({ ...r, rank: i + 1 }))
 
+	// Domain risks from the narrative join the deterministic register (after it; the register is sorted by score below).
+	const risks: Risk[] = [...rt.risks]
+	for (const [i, r] of (input.narrative?.risks ?? []).entries()) {
+		const unknown = (r.finding_ids ?? []).filter((f) => !knownFindings.has(f))
+		if (unknown.length) throw new Error(`Risk "${r.title}" cites unknown finding ids: ${unknown.join(", ")}`)
+		risks.push({ id: `rk_n${i + 1}`, title: r.title, category: r.category ?? "business", likelihood: Math.max(0, Math.min(1, r.likelihood)), severity: Math.max(0, Math.min(1, r.severity)), mitigation: r.mitigation, finding_ids: r.finding_ids ?? [] })
+	}
+	risks.sort((a, b) => b.likelihood * b.severity - a.likelihood * a.severity || a.id.localeCompare(b.id))
+
 	// Roadmap from the chosen option's tranches (gate i reviews tranche i-1's kill criteria, as in the fixtures).
+	// Stop conditions come from the break-even sweep when the model gave none; a gate without one says so.
+	const killFallback = kills.length ? kills.slice(0, 3) : ["No stop condition could be derived from the model; define one before releasing money."]
 	const roadmap: BusinessPlan["roadmap"] = []
 	const tr = chosen.base.tranches ?? []
 	if (tr.length) {
 		tr.forEach((t, i) => {
-			if (i === 0) roadmap.push({ month: t.month, milestone: `Tranche 1 released (${fmt(t.amount)} ${chosen.base.currency})`, gate: false })
+			if (i === 0) roadmap.push({ month: t.month, milestone: `Tranche 1 released (${fmt(t.amount)} ${cur})`, gate: false })
 			else {
 				roadmap.push({
 					month: t.month,
-					milestone: `Gate review before tranche ${i + 1} (${fmt(t.amount)} ${chosen.base.currency})`,
+					milestone: `Gate review before tranche ${i + 1} (${fmt(t.amount)} ${cur})`,
 					gate: true,
-					kill_criteria: tr[i - 1]!.kill_criteria,
+					kill_criteria: tr[i - 1]!.kill_criteria.length ? tr[i - 1]!.kill_criteria : killFallback,
 				})
 			}
 		})
+	} else if (isBaseline) {
+		const enable = rt.breakpoints.find((b) => b.kind === "enables")
+		roadmap.push({ month: 0, milestone: "Continue as is", gate: false })
+		roadmap.push({ month: 12, milestone: `12-month review${enable ? `: revisit "${alternative!.base.name}" if ${enable.condition}` : ""}`, gate: true })
 	} else {
 		roadmap.push({ month: 0, milestone: `Start: ${decision.verdict}`, gate: false })
-		roadmap.push({ month: 12, milestone: "12-month review against plan", gate: true, kill_criteria: [changeNote] })
+		roadmap.push({ month: 12, milestone: "12-month review against plan", gate: true, kill_criteria: killFallback })
 	}
 	roadmap.sort((a, b) => a.month - b.month)
 
-	// Executive summary: liquidity first, then prose, then honest caveats.
-	const summaryBody =
-		input.narrative?.executive_summary ??
-		`Recommended direction: ${decision.verdict}. ${decision.rationale} Base-case NPV is ${fmt(chosen.base.metrics.npv)} ${chosen.base.currency} (adverse case ${fmt(chosen.low.metrics.npv)}, favourable ${fmt(chosen.high.metrics.npv)}) against ${fmt(baseline.base.metrics.npv)} for continuing.`
+	// Executive summary: liquidity first, then prose, then the engine's facts and honest caveats.
 	const caveats: string[] = []
 	if (input.findings.length === 0) caveats.push("No verified findings back these assumptions, so all figures are illustrative.")
 	if (confidence < 0.5) caveats.push(`Overall confidence is low (${confidence}); treat ranges, not point values, as the result.`)
 	if (unresolved.length) caveats.push(`${unresolved.length} research topic(s) did not finish.`)
-	const executive_summary = [rt.liquidityWarning, summaryBody, ...caveats].filter(Boolean).join(" ")
+	if (inert.length) caveats.push(`${inert.length} assumption(s) change no projection and are ignored by the numbers: ${inert.map((a) => a.text).join("; ")}.`)
+	const executive_summary = [rt.liquidityWarning, input.narrative?.executive_summary, engineSummary, ...caveats].filter(Boolean).join(" ")
 
-	const tcoIds = input.buildBuy.flatMap((t) => t.assumption_ids)
 	const plan: BusinessPlan = {
 		schema_version: "1.0",
 		run_id: input.runId,
@@ -276,14 +331,14 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 				...(t.finding_ids ? { finding_ids: t.finding_ids } : {}),
 			})),
 		},
-		risks: rt.risks,
+		risks,
 		roadmap,
-		assumption_ids: [...new Set([...compiled.flatMap((c) => c.ids), ...tcoIds])].sort(),
+		assumption_ids: [...referenced].sort(),
 		unresolved_topic_ids: unresolved,
 		dropped_topic_ids: dropped,
 		disclaimer: DISCLAIMER,
 	}
-	return { plan, scenarios, tornado: chosenRows.slice(0, 5), breakpoints: rt.breakpoints, decision }
+	return { plan, scenarios, tornado: (rowsBySpec.get(chosen.cs.spec.id) as TornadoRow[]).slice(0, 5), breakpoints: rt.breakpoints, decision, inert, engineSummary }
 }
 
 export type { CompiledSpec }

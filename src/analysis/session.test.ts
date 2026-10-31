@@ -14,8 +14,9 @@ test("ensureBaseline: no do_nothing scenario from the model -> illustrative base
 	assert.equal(session.recompute(), null) // nothing to assemble yet
 	assert.equal(session.ensureBaseline(), true)
 	assert.equal(session.ensureBaseline(), false) // idempotent
-	assert.equal(state.assumptions.size, 2)
-	for (const a of state.assumptions.values()) assert.equal(a.origin, "user") // the profile stated these figures
+	assert.equal(state.assumptions.size, 3) // revenue, cost and the (unstated) investable budget
+	assert.equal(state.assumptions.get("as_001")!.origin, "user") // the profile stated these figures
+	assert.equal(state.assumptions.get("as_003")!.origin, "default") // investable budget was not stated: an explicit placeholder
 	const out = session.recompute()
 	assert.ok(out)
 	assertValid("business_plan", out.plan)

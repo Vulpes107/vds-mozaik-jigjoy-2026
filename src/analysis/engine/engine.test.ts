@@ -4,6 +4,7 @@ import { compile } from "./expr.ts"
 import { breakEvenMonth, irrAnnual, npvMonthly, paybackMonths } from "./finance.ts"
 import { compileSpec, computeScenario } from "./scenario.ts"
 import { breakEvenValue, rankAssumptions, tornado } from "./sensitivity.ts"
+import { cohort, ramp } from "./expr.ts"
 import { computeTco } from "./tco.ts"
 import type { Assumption, ScenarioSpec } from "./types.ts"
 
@@ -181,6 +182,21 @@ test("sensitivity: pinned assumptions have zero swing; ranks aggregate across sp
 	assert.equal(ranks.get("as_001"), 1)
 })
 
+test("expr: cohort and ramp wire churn and time to market into revenue", () => {
+	// 100 adds/month, no churn, no build time: month m has 100m active; year 1 = 100 * (1+...+12) = 7,800 subscriber-months.
+	near(cohort(100, 0, 1), 7800, 1e-9)
+	// 20 % monthly churn: steady state 500 subscribers; year 3 is close to 12 * 500.
+	assert.ok(cohort(100, 0.2, 3) > 5900 && cohort(100, 0.2, 3) < 6000, String(cohort(100, 0.2, 3)))
+	// A 6-month build delays the cohort by 6 months: year 1 only has months 1..6 of growth.
+	near(cohort(100, 0, 1, 6), 100 * (1 + 2 + 3 + 4 + 5 + 6), 1e-9)
+	near(ramp(6, 1), 0.5, 1e-12)
+	near(ramp(6, 2), 1, 1e-12)
+	near(ramp(18, 1), 0, 1e-12)
+	near(compile("cohort(as_001, as_002 / 100, year, 6) * 2").evaluate({ as_001: 100, as_002: 0, year: 1 }), 4200, 1e-9)
+	assert.throws(() => compile("cohort(100, 25, 1)").evaluate({}), /fraction 0..1/)
+	assert.throws(() => compile("cohort(100, 0.1)"), /takes 3 to 4 arguments/)
+})
+
 test("sensitivity: break-even value where plan stops beating baseline", () => {
 	const baseline: ScenarioSpec = { ...expandSpec, id: "sc_nothing", name: "Do nothing", kind: "do_nothing", capex: "0", revenue: "as_001 * as_002 * 0.7", opex: "as_003 * 0.7" }
 	// units 1000, rate 0, 2 years. expand NPV = 2000*P - 124,000; baseline NPV = 1400*P - 70,000.
@@ -190,6 +206,11 @@ test("sensitivity: break-even value where plan stops beating baseline", () => {
 	// Where the plan survives its whole range (baseline too weak to catch it) there is no break-even.
 	const weak: ScenarioSpec = { ...baseline, revenue: "as_001 * as_002 * 0.5", opex: "as_003 * 0.5" }
 	assert.equal(breakEvenValue(compileSpec(expandSpec), compileSpec(weak), assumptions, "as_001"), null)
+	// The other direction: a plan that loses at base (capex 60,000) pays off above price 150 (hand-solved: 2000P - 160,000 = 1400P - 70,000).
+	const heavy: ScenarioSpec = { ...expandSpec, capex: "60000" }
+	const wide = assumptions.map((a) => (a.id === "as_001" ? { ...a, high: 200 } : a))
+	near(breakEvenValue(compileSpec(heavy), compileSpec(baseline), wide, "as_001")!, 150, 1e-6)
+	assert.equal(breakEvenValue(compileSpec(heavy), compileSpec(baseline), assumptions, "as_001"), null) // high 120 never gets there
 	// At that price the NPVs should match.
 	const at = assumptions.map((a) => (a.id === "as_001" ? { ...a, user_override: v } : a))
 	const diff =
