@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Obj, RunState, Slot } from "../shared/runtime.ts"
-import { openStore } from "./store.ts"
+import { dataDir, openStore } from "./store.ts"
 
 export interface Snapshot {
 	runId: string
@@ -67,14 +67,14 @@ export function runStatus(s: RunState): string {
 }
 
 /** Upsert the run's latest snapshot into `<dir>/mozaik.db`; returns the database path. */
-export function writeSnapshot(s: RunState, dir = "data"): string {
+export function writeSnapshot(s: RunState, dir = dataDir()): string {
 	const snap = snapshot(s)
 	openStore(dir).save(s.runId, snap.savedAt, { projectId: s.profile?.project_id as string | undefined, company: s.profile?.name as string | undefined, status: runStatus(s), spentUsd: s.spent.usd }, JSON.stringify(snap))
 	return join(dir, "mozaik.db")
 }
 
 /** Reads the run from the database; falls back to a pre-ADR-0002 `<dir>/<runId>.json` file. */
-export function readSnapshot(runId: string, dir = "data"): Snapshot {
+export function readSnapshot(runId: string, dir = dataDir()): Snapshot {
 	const stored = openStore(dir).load(runId)
 	if (stored) return JSON.parse(stored) as Snapshot
 	const legacy = join(dir, `${runId}.json`)

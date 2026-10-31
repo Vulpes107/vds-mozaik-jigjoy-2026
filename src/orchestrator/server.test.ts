@@ -1,6 +1,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join as joinPath } from "node:path"
 import { createServer } from "node:http"
 import { SemanticEvent, createHuman } from "@mozaik-ai/core"
 import { EV } from "../shared/events.ts"
@@ -8,6 +10,7 @@ import { join, sendEvent } from "../shared/runtime.ts"
 import { validate } from "../shared/validate.ts"
 import { _resetForTests, handle } from "./server.ts"
 
+process.env.DATA_DIR = mkdtempSync(joinPath(tmpdir(), "swarm-")) // keep test runs out of the real run list
 const profile = JSON.parse(readFileSync("mocks/company_profile.sample.json", "utf8"))
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))
 let runId = ""

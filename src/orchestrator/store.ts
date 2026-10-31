@@ -70,7 +70,10 @@ export class RunStore {
 const stores = new Map<string, RunStore>()
 
 /** One handle per database file for the life of the process. */
-export function openStore(dir = "data"): RunStore {
+/** Where snapshots and the run database live; tests point it at a temp dir so they never show up as runs. */
+export const dataDir = () => process.env.DATA_DIR ?? "data"
+
+export function openStore(dir = dataDir()): RunStore {
 	const path = dir === ":memory:" ? dir : join(dir, "mozaik.db")
 	let s = stores.get(path)
 	if (!s) stores.set(path, (s = new RunStore(path)))
