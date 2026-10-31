@@ -16,7 +16,7 @@ export function Export({ plan, scenarios, assumptions, findings }: { plan?: Busi
 	const [copied, setCopied] = useState(false)
 	const share = `${location.origin}${location.pathname}?run=${RUN_ID}&ro=1`
 	return (
-		<Section id="export" n="09" title="Export" lede="Take the plan with you. The share link opens this page without editing controls.">
+		<Section id="export" title="Export" lede="Take the plan with you. The share link opens this page without editing controls.">
 			<div className="filters">
 				<button className="btn" disabled={!plan} onClick={() => plan && save(`${RUN_ID}.json`, JSON.stringify({ plan, scenarios, assumptions, findings }, null, 2), "application/json")}>JSON</button>
 				<button className="btn" disabled={!plan} onClick={() => plan && save(`${RUN_ID}.md`, toMarkdown(plan, scenarios, assumptions), "text/markdown")}>Markdown</button>

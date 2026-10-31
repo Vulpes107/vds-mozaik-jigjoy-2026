@@ -1,7 +1,7 @@
-import type { Assumption, BusinessPlan, Finding, Scenario, Topic } from "../types/contracts.ts"
+import type { Assumption, BusinessPlan, Finding, Scenario, Source, Topic } from "../types/contracts.ts"
 import { LOW_CONFIDENCE } from "../derive.ts"
-import { confWord, dateOnly, pct } from "../fmt.ts"
-import { Banner } from "../ui.tsx"
+import { compact, confWord, dateOnly, pct } from "../fmt.ts"
+import { Banner, Kpi } from "../ui.tsx"
 
 export function lowConfidenceReasons(plan: BusinessPlan, topics: Topic[], assumptions: Assumption[], findings: Finding[]): string[] {
 	const r: string[] = []
@@ -15,7 +15,7 @@ export function lowConfidenceReasons(plan: BusinessPlan, topics: Topic[], assump
 	return r
 }
 
-export function Verdict({ plan, scenarios, topics, assumptions, findings }: { plan?: BusinessPlan; scenarios: Scenario[]; topics: Topic[]; assumptions: Assumption[]; findings: Finding[] }) {
+export function Verdict({ plan, scenarios, topics, assumptions, findings, sources }: { plan?: BusinessPlan; scenarios: Scenario[]; topics: Topic[]; assumptions: Assumption[]; findings: Finding[]; sources: Source[] }) {
 	if (!plan) {
 		const done = topics.filter((t) => t.state === "closed" || t.state === "dropped").length
 		return (
@@ -33,7 +33,11 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings }: { pl
 	const conf = plan.overall_confidence ?? 0
 	const reasons = lowConfidenceReasons(plan, topics, assumptions, findings)
 	const liqRisk = plan.risks.find((r) => r.category === "liquidity")
+	const m = chosen?.metrics
+	const inv = plan.decisions.investment
+	const gaps = plan.unresolved_topic_ids?.length ?? 0
 	return (
+		<>
 		<div className="verdict">
 			{liquidity && (
 				<div className="liq">
@@ -61,5 +65,14 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings }: { pl
 				</p>
 			</div>
 		</div>
+		<div className="kpis" aria-label="Key figures">
+			<Kpi label="Value of chosen option (NPV)" value={m?.npv !== undefined ? `${compact(m.npv)} ${chosen!.currency}` : "n/a"} sub={chosen ? `${chosen.name}, base case` : undefined} />
+			<Kpi label="Money needed" value={`${compact(inv.base)} ${inv.currency}`} sub={`range ${compact(inv.low)} to ${compact(inv.high)}${inv.staged ? ", in steps" : ""}`} />
+			<Kpi label="Pays back after" value={m?.payback_months != null ? `${m.payback_months} months` : "not within horizon"} sub={m?.break_even_month != null ? `monthly break-even at month ${m.break_even_month}` : undefined} />
+			<Kpi label="Lowest cash balance" value={m?.min_cash_balance !== undefined ? `${compact(m.min_cash_balance)} ${chosen!.currency}` : "n/a"} tone={m?.min_cash_balance !== undefined && m.min_cash_balance < 0 ? "crit" : undefined} sub={m?.runway_breached ? "runs out of cash" : "stays positive"} />
+			<Kpi label="Evidence" value={`${findings.length} findings`} sub={`from ${sources.length} sources`} />
+			<Kpi label="Open gaps" value={gaps} sub={gaps ? "research topics unfinished" : "all topics settled"} tone={gaps ? undefined : "good"} />
+		</div>
+		</>
 	)
 }

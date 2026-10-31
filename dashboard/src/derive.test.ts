@@ -34,3 +34,21 @@ test("groupScenarios collects low/high cases next to the base case", () => {
 	assert.equal(g[0]!.low!.id, "aLow")
 	assert.equal(g[1]!.low, undefined)
 })
+
+import { cashFacts, cashStory, mapStory, npvStory } from "./derive.ts"
+test("cash story states the dip and the recovery in words", () => {
+	const pts = [0, 1, 2, 3, 4].map((m, i) => ({ month: m, cash: [10, -5, -20, -1, 8][i]! }))
+	const f = cashFacts("Expand", pts)
+	assert.deepEqual([f.belowFrom, f.lowMonth, f.recoversAt], [1, 2, 4])
+	assert.match(cashStory([f], "EUR")[0]!, /below zero in month 1.*back above zero in month 4/)
+	assert.match(cashStory([cashFacts("Stay", [{ month: 0, cash: 5 }, { month: 1, cash: 6 }])], "EUR")[0]!, /never drops below zero/)
+})
+test("npv and map stories flag affordability and weak evidence", () => {
+	const g = groupScenarios([sc({ id: "a", kind: "do_nothing", name: "Do nothing", metrics: { npv: 100 } }), sc({ id: "b", kind: "expand", name: "Expand", metrics: { npv: 300, runway_breached: true } })])
+	const s = npvStory(g, "EUR").join(" ")
+	assert.match(s, /Expand at 300/)
+	assert.match(s, /does not mean it is affordable/)
+	const t = mapStory([{ id: "t_1", state: "deep", importance_prior: 0.8, impact: 0.85, confidence: 0.4 }, { id: "t_2", state: "dropped", importance_prior: 0.1, state_reason: "off topic" }] as unknown as Topic[])
+	assert.match(t.join(" "), /t_1 matter a lot/)
+	assert.match(t.join(" "), /t_2 \(off topic\)/)
+})
