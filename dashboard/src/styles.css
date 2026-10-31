@@ -215,10 +215,45 @@ td.num { font-size: 13px; }
   .page > .hdr { order: -4; } .page > .banner.info { order: -3; } .page > .verdict { order: -2; } .page > #risks { order: -1; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* print: a report, not a screen. Always light, A4, one chapter per page, nothing interactive. */
 @media print {
-  .hdr-tools, .replay, .filters, .btn, .edit input { display: none !important; }
-  body { background: #fff; color: #000; }
-  .vlist { height: auto; overflow: visible; }
+  @page { size: A4; margin: 16mm 14mm 18mm; }
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --bg: #fff; --surface: #f6f2ea; --ink: #1b1a17; --ink-2: #55524a; --muted: #6b675d; --rule: #c9c3b5; --rule-soft: #e7e2d6;
+    --accent: #1f5f5b; --accent-ink: #fff; --accent-soft: #dce9e6;
+    --warn: #7a4d00; --warn-bg: #f3e3bf; --crit: #a62f20; --crit-bg: #f4dad4; --good: #2c6a3c; --good-bg: #dcebdc;
+    --c-scout: #2f6db5; --c-collector: #c8553d; --c-analyst: #2e8b6a; --c-verifier: #a9790a; --c-other: #8a5ba8;
+    --gutter: 0px; color-scheme: light;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { background: #fff; }
+  body { font-size: 10.5pt; line-height: 1.45; }
+  .page { max-width: none; padding: 0; }
+  .page.soft .section:not(.keep) { opacity: 1; }
+  .nav, .hdr-tools, .replay, .filters, .btn, .edit input, .edit .vals, .feed, .banner.info, #export > h2, #export .lede, #export .note { display: none !important; }
+  .hdr { padding-top: 0; }
+  .company { font-size: 24pt; }
+  .verdict .word { font-size: 44pt; }
+  .verdict .summary { font-size: 13pt; }
+  .section { padding: 0 0 18pt; border-bottom: 0; }
+  .section > h2 { font-size: 20pt; margin-bottom: 4pt; padding-bottom: 6pt; border-bottom: 1px solid var(--ink); }
+  .lede { margin-bottom: 14pt; }
+  #recommend, #finance, #risks, #research, #evidence { break-before: page; padding-top: 0; }
+  h2, h3, h4, .sub, .fig-t { break-after: avoid; }
+  .fig, .rec, .kpis, .lane, .edit, .srcs li, .row-f, tr, .rank li, .banner, .callout, .facts, .conf { break-inside: avoid; }
+  .fig { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 0 20pt; margin-bottom: 20pt; }
+  .fig svg { max-height: 80mm; }
+  .grid2, .cols-7-5, .cols-8-4 { gap: 20pt 24pt; }
+  .activity { display: block; } .activity > div:first-child { display: none; }
+  .vlist, .srcs, .feed { height: auto !important; max-height: none; overflow: visible; }
+  .vlist > div { height: auto !important; }
+  .row-f { position: static; height: auto; overflow: visible; }
+  .row-f p { display: block; -webkit-line-clamp: unset; }
+  .rec .why { background: var(--surface); }
+  a { color: inherit; text-decoration: none; }
+  .srcs a, .row-f a { color: var(--accent); }
+  #export { padding-top: 8pt; border-top: 1px solid var(--rule); }
+  #export .foot { font-size: 8.5pt; color: var(--muted); }
 }
 
 /* nav */

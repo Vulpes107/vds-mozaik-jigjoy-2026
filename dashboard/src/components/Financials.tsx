@@ -3,7 +3,7 @@ import type { Assumption, Scenario } from "../types/contracts.ts"
 import { READ_ONLY } from "../api.ts"
 import { cashCurve, cashFacts, cashStory, effective, groupScenarios, isPinned, npvStory } from "../derive.ts"
 import { compact, money, pct } from "../fmt.ts"
-import { Chip, Figure, RangeBar, Section } from "../ui.tsx"
+import { Chip, Figure, RangeBar, Section, usePrinting } from "../ui.tsx"
 
 const SERIES = ["var(--c-scout)", "var(--c-collector)", "var(--c-analyst)", "var(--c-verifier)", "var(--c-other)"]
 
@@ -68,6 +68,7 @@ function NpvChart({ scenarios }: { scenarios: Scenario[] }) {
 }
 
 function CashChart({ scenarios, opening }: { scenarios: Scenario[]; opening: number | undefined }) {
+	const printing = usePrinting()
 	const base = useMemo(() => scenarios.filter((s) => (s.case ?? "base") === "base"), [scenarios])
 	const curves = useMemo(() => base.map((s) => ({ s, pts: cashCurve(s, opening ?? 0) })), [base, opening])
 	if (!curves.length) return null
@@ -131,7 +132,7 @@ function CashChart({ scenarios, opening }: { scenarios: Scenario[]; opening: num
 				})}
 			</svg>
 			<p className="note">Amounts in {cur}. Built from yearly totals and tranche releases, so month-to-month wiggles are smoothed; the engine's own lowest-cash figure (table above) is authoritative.</p>
-			<details>
+			<details open={printing || undefined}>
 				<summary className="note" style={{ cursor: "pointer" }}>Show as a table</summary>
 				<table>
 					<thead><tr><th>Month</th>{curves.map((c) => <th key={c.s.id} className="r">{c.s.name}</th>)}</tr></thead>
