@@ -5,6 +5,7 @@
 import { ModelMessageItem, type ExecutableTransition, type InterceptionHandler } from "@mozaik-ai/core"
 import type { Budget } from "../shared/runtime.ts"
 import { resolveRuntime } from "../shared/runtime.ts"
+import { researchBudget } from "./allocator.ts"
 
 const LINES = ["tokens", "calls", "usd", "seconds"] as const
 
@@ -22,7 +23,7 @@ export const STOP_MESSAGE = "Budget exhausted for this task. Stopping here; find
 export function budgetInterceptor(topicId: string): InterceptionHandler {
 	const why = (): string | null => {
 		const s = resolveRuntime().state
-		const run = exhaustedLine(s.spent, s.runBudget)
+		const run = exhaustedLine(s.spent, researchBudget(s.runBudget)) // workers stop at the research share; analysis keeps the rest
 		if (run) return `run ${run}`
 		const t = s.topics.get(topicId)
 		const topic = exhaustedLine(t?.spent as Budget | undefined, t?.budget as Budget | undefined)

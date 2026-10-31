@@ -8,6 +8,9 @@ import { validate } from "../shared/validate.ts"
 type P = Record<string, unknown>
 
 /** EV.* -> AgentEvent.type, plus the fields to lift out of the payload. */
+const r2 = (n: unknown) => (typeof n === "number" ? Math.round(n * 100) / 100 : n)
+const budgetLine = (p: Record<string, unknown>) => `${p.line}: ${r2(p.used)}/${r2(p.limit)} for research${(p.reserved as number) > 0 ? ` (${r2(p.reserved)} kept for analysis)` : ""}`
+
 const MAP: Record<string, (p: P) => Partial<Obj> | null> = {
 	[EV.RunStarted]: () => ({ type: "run_started" }),
 	[EV.RunCompleted]: (p) => ({ type: "run_completed", detail: p.reason }),
@@ -24,8 +27,8 @@ const MAP: Record<string, (p: P) => Partial<Obj> | null> = {
 	[EV.SourceSubmitted]: (p) => ({ type: "source_added", ref_id: p.id, topic_id: p.topicId }),
 	[EV.ConflictDetected]: (p) => ({ type: "conflict_detected", ref_id: p.id, topic_id: p.topicId, detail: p.detail }),
 	[EV.InjectionFlagged]: (p) => ({ type: "injection_flagged", ref_id: p.id, topic_id: p.topicId, detail: p.detail }),
-	[EV.BudgetWarning]: (p) => ({ type: "budget_warning", detail: `${p.line}: ${p.used}/${p.limit}` }),
-	[EV.BudgetExhausted]: (p) => ({ type: "budget_exhausted", detail: `${p.line}: ${p.used}/${p.limit}` }),
+	[EV.BudgetWarning]: (p) => ({ type: "budget_warning", detail: budgetLine(p) }),
+	[EV.BudgetExhausted]: (p) => ({ type: "budget_exhausted", detail: budgetLine(p) }),
 	[EV.AnalysisRequested]: (p) => ({ type: "analysis_started", detail: `${(p.unresolvedTopicIds as string[])?.length ?? 0} unresolved` }),
 	[EV.ScenarioComputed]: (p) => ({ type: "scenario_computed", ref_id: p.id }),
 	[EV.PlanReady]: () => ({ type: "plan_ready" }),

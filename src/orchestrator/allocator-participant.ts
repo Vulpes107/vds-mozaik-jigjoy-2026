@@ -14,6 +14,7 @@ const INPUTS = new Set<string>([
 	EV.ReassignmentRequested,
 	EV.SpendRecorded,
 	EV.AllocatorTick,
+	EV.PlanReady,
 ])
 
 class WhenWorkerEvent extends SituationSpecification {

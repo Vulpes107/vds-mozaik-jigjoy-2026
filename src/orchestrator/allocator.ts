@@ -60,6 +60,8 @@ export interface AllocatorConfig {
 	warnAt: number
 	/** A slot busy longer than this (no task.finished) is freed and its topic retried. */
 	taskTimeoutMs: number
+	/** Share of each budget line kept for the analysis stages, which run after research: max(fraction x limit, absolute), never more than half. */
+	analysisReserve: { fraction: number; usd: number; seconds: number; tokens: number }
 }
 
 export const defaultConfig: AllocatorConfig = {
@@ -73,14 +75,25 @@ export const defaultConfig: AllocatorConfig = {
 	maxReassignments: 5,
 	warnAt: 0.8,
 	taskTimeoutMs: 420_000, // above research's own per-task limits (<= 360 s), so workers time themselves out first
+	analysisReserve: { fraction: 0.25, usd: 0.75, seconds: 240, tokens: 300_000 }, // the 2026-10-31 live run: analysis took 0.57 USD and 150 s after research stopped
+}
+
+/** The part of one budget line research may spend; the rest is kept for analysis. Search calls are research-only, so no reserve. */
+export function researchLimit(line: keyof Budget, limit: number, cfg: AllocatorConfig = defaultConfig): number {
+	const abs = line === "calls" ? 0 : cfg.analysisReserve[line]
+	if (!abs) return limit
+	return limit - Math.min(Math.max(cfg.analysisReserve.fraction * limit, abs), limit / 2)
+}
+export function researchBudget(b: Budget, cfg: AllocatorConfig = defaultConfig): Budget {
+	return Object.fromEntries((Object.entries(b) as [keyof Budget, number | undefined][]).filter(([, v]) => v !== undefined).map(([k, v]) => [k, researchLimit(k, v!, cfg)]))
 }
 
 export type Action =
 	| { type: typeof EV.TopicStateChanged; topicId: string; from: TopicState; to: TopicState; reason: string }
 	| { type: typeof EV.TopicDropped; topicId: string; reason: string }
 	| { type: typeof EV.TaskAssigned; slotId: string; role: WorkerRole; topicId: string; fromTopicId?: string; handoff?: string }
-	| { type: typeof EV.BudgetWarning; line: keyof Budget; used: number; limit: number }
-	| { type: typeof EV.BudgetExhausted; line: keyof Budget; used: number; limit: number }
+	| { type: typeof EV.BudgetWarning; line: keyof Budget; used: number; limit: number; reserved: number }
+	| { type: typeof EV.BudgetExhausted; line: keyof Budget; used: number; limit: number; reserved: number }
 	| { type: typeof EV.AnalysisRequested; unresolvedTopicIds: string[]; droppedTopicIds: string[] }
 
 export interface Incoming {
@@ -97,10 +110,10 @@ const ROLES_NEEDED: Record<string, WorkerRole[]> = {
 }
 
 // Per-board scratch state that is not part of the Topic contract.
-const history = new WeakMap<Board, { confidence: Map<string, number[]>; rolesDone: Map<string, Set<WorkerRole>>; warned: Set<string>; analysisRequested: boolean; approved: boolean }>()
+const history = new WeakMap<Board, { confidence: Map<string, number[]>; rolesDone: Map<string, Set<WorkerRole>>; warned: Set<string>; analysisRequested: boolean; approved: boolean; planReady: boolean }>()
 function scratch(board: Board) {
 	let s = history.get(board)
-	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false }))
+	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false, planReady: false }))
 	return s
 }
 
@@ -189,7 +202,8 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				retry(t, "scout finished without scoring")
 				break
 			}
-			if (p.outcome && p.outcome !== "done") {
+			// A task that hit its own cap stopped cleanly with its findings submitted; a fresh agent would redo the same work for the same money.
+			if (p.outcome && p.outcome !== "done" && p.outcome !== "budget_exhausted") {
 				retry(t, `${p.role} ${p.outcome}`)
 				break
 			}
@@ -258,8 +272,12 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			board.spent.usd += p.usd
 			break
 		}
+		case EV.PlanReady: {
+			sc.planReady = true // the run is over: the clock stops
+			break
+		}
 		case EV.AllocatorTick: {
-			if (board.startedAt !== undefined) board.spent.seconds = Math.floor((now - board.startedAt) / 1000)
+			if (board.startedAt !== undefined && !sc.planReady) board.spent.seconds = Math.floor((now - board.startedAt) / 1000)
 			for (const [id, s] of board.slots) {
 				if (s.topicId === null || now - s.assignedAt < cfg.taskTimeoutMs) continue
 				const t = topic(s.topicId)
@@ -280,21 +298,23 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		}
 	}
 
-	// Budgets: hard limits. Exhaustion ends research; the unresolved list goes to the plan.
+	// Budgets: hard limits. Research stops at its share (the rest is reserved for analysis); the unresolved list goes to the plan.
 	let exhausted = false
 	for (const k of ["tokens", "calls", "usd", "seconds"] as const) {
-		const limit = board.runBudget[k]
-		if (!limit) continue
+		const full = board.runBudget[k]
+		if (!full) continue
+		const limit = researchLimit(k, full, cfg)
+		const reserved = full - limit
 		const used = board.spent[k]
 		if (used >= limit) {
 			exhausted = true
 			if (!sc.warned.has(`x:${k}`)) {
 				sc.warned.add(`x:${k}`)
-				out.push({ type: EV.BudgetExhausted, line: k, used, limit })
+				out.push({ type: EV.BudgetExhausted, line: k, used, limit, reserved })
 			}
 		} else if (used >= limit * cfg.warnAt && !sc.warned.has(k)) {
 			sc.warned.add(k)
-			out.push({ type: EV.BudgetWarning, line: k, used, limit })
+			out.push({ type: EV.BudgetWarning, line: k, used, limit, reserved })
 		}
 	}
 
