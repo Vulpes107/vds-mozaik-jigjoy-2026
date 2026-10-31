@@ -279,16 +279,16 @@ td.num { font-size: 13px; }
 
 /* intake form */
 .empty:has(.form) { max-width: 880px; }
-.form { margin-top: 32px; display: grid; gap: 20px; }
-.form fieldset { border: 1px solid var(--rule); padding: 14px 16px 16px; display: grid; gap: 12px; }
-.form legend { font: 600 12px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
-.form .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.field { display: grid; gap: 4px; font-size: 13px; }
+.form { margin-top: 28px; display: grid; gap: 28px; }
+.form fieldset { border: 1px solid var(--rule); margin: 0; min-width: 0; padding: 22px 24px 24px; display: grid; gap: 20px; }
+.form legend { font: 600 12px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 0 8px; }
+.form .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 20px 24px; align-items: start; }
+.field { display: grid; gap: 6px; align-content: start; font-size: 13px; min-width: 0; }
 .field > span { color: var(--ink-2); }
-.form input:not([type="checkbox"]), .form select, .form textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 2px; width: 100%; }
+.form input:not([type="checkbox"]), .form select, .form textarea { font: inherit; padding: 8px 12px; min-height: 38px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 2px; width: 100%; }
 .form .hint { font-size: 12px; color: var(--muted); }
 .form .check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
-.form .product { display: grid; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
+.form .product { display: grid; gap: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--rule-soft); }
 .form .banner ul { margin: 6px 0 0; padding-left: 18px; }
 .form .banner pre { white-space: pre-wrap; font: 12px/1.5 var(--mono); margin-top: 6px; }
 
@@ -305,3 +305,20 @@ td.num { font-size: 13px; }
 .runs .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 @media (max-width: 900px) { .landing { grid-template-columns: 1fr; } .landing aside { position: static; } }
 .banner .reason { white-space: pre-wrap; font: 12px/1.5 var(--mono); margin-top: 8px; }
+
+/* intake form: spacing and alignment */
+.field abbr { text-decoration: none; color: var(--crit); }
+.form textarea { resize: vertical; line-height: 1.5; }
+.form select { padding-right: 8px; }
+.form .hint { line-height: 1.4; margin: 0; }
+.form fieldset > .btn { justify-self: start; }
+.form .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0; }
+.form > .row { padding-top: 4px; }
+.form .btn { padding: 9px 18px; font-size: 14px; }
+.form .btn.link { padding: 0; font-size: 13px; }
+.form .check { padding: 2px 0; line-height: 1.4; }
+.form .check input { width: 16px; height: 16px; margin: 0; flex: none; }
+.landing { margin-top: 40px; margin-bottom: 72px; }
+.landing .lede { margin-bottom: 0; }
+.runs a { padding: 12px 8px; }
+@media (max-width: 640px) { .form fieldset { padding: 18px 16px 20px; } .form .cols { grid-template-columns: 1fr 1fr; gap: 16px; } .landing { margin-top: 24px; } }
