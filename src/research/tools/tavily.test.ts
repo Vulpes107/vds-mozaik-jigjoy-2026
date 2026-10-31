@@ -1,7 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ProviderError } from "./provider.ts"
-import { TavilyExtras, TavilyFetchProvider, TavilySearchProvider, type TavilyLike, createTavilyClient } from "./tavily.ts"
+import { TavilyExtras, TavilyFetchProvider, TavilySearchProvider, type TavilyLike, createTavilyClient, withKeyFailover } from "./tavily.ts"
 
 const fake = (over: Partial<Record<keyof TavilyLike, (...a: any[]) => any>> = {}): TavilyLike & { calls: Record<string, any[]> } => {
 	const calls: Record<string, any[]> = {}
@@ -95,4 +95,29 @@ test("a missing API key is a clear, non-retryable configuration error", () => {
 	} finally {
 		if (saved !== undefined) process.env.TAVILY_API_KEY = saved
 	}
+})
+
+test("several keys are used sequentially: a quota or auth failure moves to the next key and stays there", async () => {
+	const a = fake({ search: async () => { throw new Error("432 Error: usage limit exceeded") } })
+	const b = fake({ search: async () => ({ results: [{ url: "https://b.example" }] }) })
+	const c = fake()
+	const client = withKeyFailover([a, b, c])
+	assert.equal((await client.search("q", {})).results[0]!.url, "https://b.example")
+	await client.search("q2", {})
+	assert.deepEqual([a.calls.search!.length, b.calls.search!.length, c.calls.search], [1, 2, undefined])
+})
+
+test("key failover stops at a non-quota error and after every key failed", async () => {
+	const bad = fake({ search: async () => { throw new Error("400 bad request") } })
+	await assert.rejects(withKeyFailover([bad, fake()]).search("q", {}), /400/)
+	assert.equal(bad.calls.search!.length, 1)
+	const dead = () => fake({ search: async () => { throw new Error("401 unauthorized") } })
+	const [d1, d2] = [dead(), dead()]
+	await assert.rejects(withKeyFailover([d1, d2]).search("q", {}), /401/)
+	assert.deepEqual([d1.calls.search!.length, d2.calls.search!.length], [1, 1])
+})
+
+test("createTavilyClient accepts a comma-separated key list", () => {
+	assert.ok(createTavilyClient(" k1 , k2 ").search)
+	assert.throws(() => createTavilyClient(" , "), (e: unknown) => e instanceof ProviderError && e.kind === "auth")
 })

@@ -19,9 +19,32 @@ import {
 /** The slice of the SDK we use, so tests can pass a fake client. */
 export type TavilyLike = Pick<TavilyClient, "search" | "extract" | "map" | "crawl" | "research" | "getResearch">
 
-export function createTavilyClient(apiKey = process.env.TAVILY_API_KEY): TavilyLike {
-	if (!apiKey) throw new ProviderError("auth", "TAVILY_API_KEY is not set (add it to this machine's .env)", { retryable: false })
-	return tavily({ apiKey, clientSource: "mozaik-market-intel" })
+/** `TAVILY_API_KEY` may hold several keys separated by commas; they are used one after another (see `withKeyFailover`). */
+export function createTavilyClient(apiKeys = process.env.TAVILY_API_KEY): TavilyLike {
+	const keys = (apiKeys ?? "").split(",").map((k) => k.trim()).filter(Boolean)
+	if (!keys.length) throw new ProviderError("auth", "TAVILY_API_KEY is not set (add it to this machine's .env)", { retryable: false })
+	return withKeyFailover(keys.map((apiKey) => tavily({ apiKey, clientSource: "mozaik-market-intel" })))
+}
+
+/**
+ * Sequential keys: every call goes to the current client; when it fails with a quota/rate-limit or auth error the
+ * next client becomes current and the call is retried there, at most once per key. Other errors are thrown as-is.
+ */
+export function withKeyFailover(clients: TavilyLike[]): TavilyLike {
+	if (clients.length === 1) return clients[0]!
+	let current = 0
+	const failover = <M extends keyof TavilyLike>(method: M) => async (...args: Parameters<TavilyLike[M]>): Promise<Awaited<ReturnType<TavilyLike[M]>>> => {
+		for (let attempt = 0; ; attempt++) {
+			try {
+				return await (clients[current]![method] as (...a: unknown[]) => Promise<Awaited<ReturnType<TavilyLike[M]>>>)(...args)
+			} catch (err) {
+				const kind = classifyError(err).kind
+				if (attempt + 1 >= clients.length || (kind !== "rate_limited" && kind !== "auth")) throw err
+				current = (current + 1) % clients.length
+			}
+		}
+	}
+	return { search: failover("search"), extract: failover("extract"), map: failover("map"), crawl: failover("crawl"), research: failover("research"), getResearch: failover("getResearch") }
 }
 
 const dayCount = (d?: number): "day" | "week" | "month" | "year" | undefined =>
