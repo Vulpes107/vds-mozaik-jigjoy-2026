@@ -112,6 +112,40 @@ test("full run: every topic reaches closed or dropped, then analysis is requeste
 	assert.ok([...b.slots.values()].every((s) => s.topicId === null))
 })
 
+test("a deep topic that ends its first pass thin gets one more collector->analyst->verifier pass, then closes", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" }, { usd: 10, seconds: 3600 })
+	b.findings = new Map([["f_1", { topic_id: "t_1" }]])
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	let now = 2
+	const pass = (confidence: number) => {
+		const out: Action[] = []
+		for (const [slotId, role] of [["c1", "collector"], ["an1", "analyst"], ["v1", "verifier"]] as const) {
+			allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId, confidence } }, cfg, now++)
+			out.push(...allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId, role, findings: 1, sources: 1 } }, cfg, now++))
+		}
+		return out
+	}
+	const after1 = pass(0.4)
+	assert.equal(b.topics.get("t_1")!.state, "deep")
+	assert.match(b.topics.get("t_1")!.state_reason ?? "", /^second pass: confidence 0.4/)
+	const again = assigns(after1).find((a) => a.role === "collector")
+	assert.ok(again && again.handoff?.startsWith("second pass"), "the collector is re-assigned with the handoff note")
+	pass(0.5)
+	assert.equal(b.topics.get("t_1")!.state, "closed") // only one extra pass
+	// Without a topic's worth of research budget left there is no second pass.
+	const poor = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" }, { usd: 1, seconds: 3600 })
+	poor.findings = new Map([["f_1", { topic_id: "t_1" }]])
+	poor.spent.usd = 0.6
+	allocate(poor, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(poor, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
+	for (const [slotId, role] of [["c1", "collector"], ["an1", "analyst"], ["v1", "verifier"]] as const) {
+		allocate(poor, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId, confidence: 0.4 } }, cfg, now++)
+		allocate(poor, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId, role, findings: 1, sources: 1 } }, cfg, now++)
+	}
+	assert.equal(poor.topics.get("t_1")!.state, "closed")
+})
+
 test("close early on high confidence, but a deep topic waits for its verifier", () => {
 	const b = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" })
 	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)

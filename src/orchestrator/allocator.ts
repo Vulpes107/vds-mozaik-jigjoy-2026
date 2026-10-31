@@ -52,6 +52,8 @@ export interface AllocatorConfig {
 	deepImpact: number
 	/** Close a topic once confidence reaches this. */
 	closeConfidence: number
+	/** A deep topic whose first collector->analyst->verifier pass ends below this gets one more pass while the research budget has a topic's worth left. */
+	secondPassBelow: number
 	/** Close early when the last `marginalSteps` confidence deltas are all below this. */
 	marginalDelta: number
 	marginalSteps: number
@@ -75,6 +77,7 @@ export const defaultConfig: AllocatorConfig = {
 	reopenAbove: 0.35,
 	deepImpact: 0.4,
 	closeConfidence: 0.8,
+	secondPassBelow: 0.6, // the 2026-10-31 run closed every deep topic at 0.3-0.43 after one pass, with 2.5 USD unspent
 	marginalDelta: 0.02,
 	marginalSteps: 3,
 	minDwellMs: 30_000,
@@ -139,6 +142,8 @@ const ROLES_NEEDED: Record<string, WorkerRole[]> = {
 interface Scratch {
 	confidence: Map<string, number[]>
 	rolesDone: Map<string, Set<WorkerRole>>
+	/** Topics that already had their second pass. */
+	secondPass: Set<string>
 	warned: Set<string>
 	analysisRequested: boolean
 	approved: boolean
@@ -150,7 +155,7 @@ interface Scratch {
 const history = new WeakMap<Board, Scratch>()
 function scratch(board: Board) {
 	let s = history.get(board)
-	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false, planReady: false, replans: 0 }))
+	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), secondPass: new Set(), warned: new Set(), analysisRequested: false, approved: false, planReady: false, replans: 0 }))
 	return s
 }
 
@@ -255,7 +260,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			done.add(p.role)
 			sc.rolesDone.set(t.id, done)
 			if ((ROLES_NEEDED[t.state] ?? []).every((r) => done.has(r))) {
-				setState(t, "closed", "all required roles finished")
+				// A thin first pass gets one more round of the same roles instead of closing; the reason is the handoff note.
+				const thin = t.state === "deep" && (t.confidence ?? 0) < cfg.secondPassBelow && hasFindings && !sc.secondPass.has(t.id) && replanBudget(board, cfg) !== undefined
+				if (thin) {
+					sc.secondPass.add(t.id)
+					sc.rolesDone.delete(t.id)
+					t.state_reason = `second pass: confidence ${t.confidence} < ${cfg.secondPassBelow} after one pass; find more independent, typed and recent sources for the thin claims`
+				} else setState(t, "closed", "all required roles finished")
 				freeAllOn(t.id)
 			}
 			break
