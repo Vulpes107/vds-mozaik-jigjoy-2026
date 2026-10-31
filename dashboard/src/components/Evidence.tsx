@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { Finding, Source } from "../types/contracts.ts"
 import { sourceStats } from "../derive.ts"
 import { confWord, dateOnly, pct } from "../fmt.ts"
-import { Chip, Section } from "../ui.tsx"
+import { Chip, Section, usePrinting } from "../ui.tsx"
 
 const ROW = 84
 const VIEW = 440
@@ -46,8 +46,9 @@ export function Evidence({ findings, sources, focus }: { findings: Finding[]; so
 		const i = shown.findIndex((f) => focus.includes(f.id))
 		if (i >= 0 && box.current) box.current.scrollTo({ top: i * ROW - 8 })
 	}, [focus, shown])
-	const first = Math.max(0, Math.floor(scroll / ROW) - 3)
-	const last = Math.min(shown.length, Math.ceil((scroll + VIEW) / ROW) + 3)
+	const printing = usePrinting()
+	const first = printing ? 0 : Math.max(0, Math.floor(scroll / ROW) - 3)
+	const last = printing ? shown.length : Math.min(shown.length, Math.ceil((scroll + VIEW) / ROW) + 3)
 	const stats = sourceStats(sources)
 	return (
 		<Section id="evidence" title="The evidence" lede="Every claim the agents collected and where it came from. Click “findings” on an assumption, or “Why this?” on a recommendation, to jump to the evidence behind it.">

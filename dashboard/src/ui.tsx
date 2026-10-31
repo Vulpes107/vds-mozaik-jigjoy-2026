@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { clamp, label } from "./fmt.ts"
 
 export const Chip = ({ kind, children }: { kind: string; children?: ReactNode }) => <span className={`chip ${kind}`}>{children ?? label(kind)}</span>
@@ -94,4 +94,17 @@ export function Kpi({ label: l, value, sub, tone }: { label: string; value: Reac
 			{sub && <span className="kpi-s">{sub}</span>}
 		</div>
 	)
+}
+
+/** True between `beforeprint` and `afterprint`, so virtualised or collapsed content can render in full for the PDF. */
+export function usePrinting() {
+	const [on, setOn] = useState(false)
+	useEffect(() => {
+		const start = () => setOn(true)
+		const stop = () => setOn(false)
+		window.addEventListener("beforeprint", start)
+		window.addEventListener("afterprint", stop)
+		return () => { window.removeEventListener("beforeprint", start); window.removeEventListener("afterprint", stop) }
+	}, [])
+	return on
 }
