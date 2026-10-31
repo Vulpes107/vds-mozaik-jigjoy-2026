@@ -12,6 +12,7 @@ import { makeMeter } from "./meter.ts"
 import { makeOperator } from "./operator.ts"
 import { startPlanner } from "./planner.ts"
 import { readSnapshot, restore, writeSnapshot } from "./snapshot.ts"
+import { dataDir } from "./store.ts"
 
 export interface RunOptions {
 	runId?: string
@@ -30,7 +31,7 @@ export interface RunOptions {
 }
 
 /** Applied when the profile sets no run_budget: a run never spends without a cap. */
-export const defaultRunBudget: Budget = { usd: 2, seconds: 1800 }
+export const defaultRunBudget: Budget = { usd: 4, seconds: 1800 }
 
 export const defaultSlots: Record<WorkerRole, number> = { scout: 2, collector: 1, analyst: 2, verifier: 1 }
 
@@ -49,7 +50,7 @@ export function startRun(profile: Obj, opts: RunOptions = {}): RunState {
 
 /** Resume a crashed run from its snapshot. Slots start idle; if the topic list was approved the Allocator refills them. */
 export function resumeRun(runId: string, opts: RunOptions = {}): RunState {
-	const dir = opts.snapshotDir ?? "data"
+	const dir = opts.snapshotDir ?? dataDir()
 	const state = restore(startRuntime(runId), readSnapshot(runId, dir))
 	const cartographer = joinParticipants(state, opts) // the Planner skips a board that already has topics, but stays for replan rounds
 	if (state.checkpoints.get("cp_topics")?.status === "approved") {
@@ -86,7 +87,7 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 			clearTimeout(timer)
 			timer = setTimeout(() => {
 				try {
-					writeSnapshot(state, opts.snapshotDir ?? "data")
+					writeSnapshot(state, opts.snapshotDir ?? dataDir())
 				} catch (e) {
 					console.error(`snapshot of ${state.runId} failed (run continues, resume is not possible): ${String(e)}`) // e.g. a read-only data/mozaik.db
 				}

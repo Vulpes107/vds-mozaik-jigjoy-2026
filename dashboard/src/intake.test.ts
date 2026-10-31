@@ -33,20 +33,20 @@ test("slots are sized from money over time: never below scout+collector+analyst,
 	assert.deepEqual(sizeSlots({ usd: 2, seconds: 1800 }), { scout: 1, collector: 1, analyst: 1, verifier: 0 })
 	assert.deepEqual(sizeSlots({ usd: 5, seconds: 1800 }), { scout: 1, collector: 1, analyst: 1, verifier: 1 })
 	assert.deepEqual(sizeSlots({ usd: 2.4, seconds: 600 }), { scout: 2, collector: 1, analyst: 2, verifier: 1 })
-	assert.deepEqual(sizeSlots({ usd: 50, seconds: 600 }), { scout: 3, collector: 2, analyst: 2, verifier: 1 })
+	assert.deepEqual(sizeSlots({ usd: 50, seconds: 600 }), { scout: 2, collector: 2, analyst: 2, verifier: 2 })
 	assert.deepEqual(sizeSlots(), sizeSlots(RECOMMENDED))
 	assert.equal(Object.values(clean(base()).slots).reduce((a, b) => a + b), 3, "the golden fixture carries no run_budget: defaults apply")
 })
 test("recommendations scale with products and react to runway", () => {
 	const one = recommend(base().profile)
-	assert.equal(one.run_budget.usd, 2)
+	assert.equal(one.run_budget.usd, 4)
 	assert.equal(one.runway_months, null) // cash-positive
 	assert.equal(one.investable_budget, 150000)
 	const p = base().profile
 	p.products = [...p.products, { name: "b", description: "b" }, { name: "c", description: "c" }]
 	p.financials = { monthly_burn: 50000, annual_revenue: 0, cash_on_hand: 200000 }
 	const three = recommend(p)
-	assert.equal(three.run_budget.usd, 4)
+	assert.equal(three.run_budget.usd, 6)
 	assert.equal(three.run_budget.seconds, 3000)
 	assert.equal(three.runway_months, 4)
 	assert.equal(three.risk_appetite, "low")
