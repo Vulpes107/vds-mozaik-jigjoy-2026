@@ -3,10 +3,8 @@ import { LOW_CONFIDENCE, goNoGo } from "../derive.ts"
 import { compact, confWord, dateOnly, pct } from "../fmt.ts"
 import { Banner, Kpi } from "../ui.tsx"
 
-export function lowConfidenceReasons(plan: BusinessPlan, topics: Topic[], assumptions: Assumption[], findings: Finding[]): string[] {
+export function lowConfidenceReasons(plan: BusinessPlan, assumptions: Assumption[], findings: Finding[]): string[] {
 	const r: string[] = []
-	const unresolved = plan.unresolved_topic_ids?.length ?? topics.filter((t) => t.state === "research_incomplete").length
-	if (unresolved) r.push(`${unresolved} research topic${unresolved > 1 ? "s" : ""} unresolved`)
 	const defaults = assumptions.filter((a) => a.origin === "default").length
 	if (defaults) r.push(`${defaults} of ${assumptions.length} assumptions are defaults, not evidence`)
 	const weak = findings.filter((f) => f.confidence < 0.5).length
@@ -31,7 +29,7 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings, source
 	const chosen = scenarios.find((s) => s.id === plan.chosen_scenario_id)
 	const liquidity = chosen?.metrics?.runway_breached || plan.risks.some((r) => r.category === "liquidity" && r.likelihood * r.severity >= 0.3)
 	const conf = plan.overall_confidence ?? 0
-	const reasons = lowConfidenceReasons(plan, topics, assumptions, findings)
+	const reasons = lowConfidenceReasons(plan, assumptions, findings)
 	const liqRisk = plan.risks.find((r) => r.category === "liquidity")
 	const m = chosen?.metrics
 	const inv = plan.decisions.investment
