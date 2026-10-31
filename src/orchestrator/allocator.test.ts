@@ -301,3 +301,41 @@ test("nothing is assigned before the human approves the topic list (a tick or sp
 	assert.equal(b.topics.get("t_1")!.state, "queued")
 	assert.equal(assigns(allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 2000)).length, 1)
 })
+
+test("replan: research budget left after every topic closes buys a follow-up round before analysis; new topics need no re-approval", () => {
+	const b = board([{ id: "t_1" }], { s1: "scout", an1: "analyst" }, { usd: 5 })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.2, rationale: "seed" } }, cfg, 1) // shallow: analyst only
+	let a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: "an1", role: "analyst" } }, cfg, 2)
+	assert.deepEqual(a.find((x) => x.type === EV.ReplanRequested), { type: EV.ReplanRequested, remaining: { usd: 3.75 }, round: 1 }) // 5 minus the 1.25 analysis reserve
+	assert.ok(!a.some((x) => x.type === EV.AnalysisRequested))
+	// Waiting for the Planner: a tick neither asks again nor starts analysis.
+	assert.equal(allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, 3).length, 0)
+	b.topics.set("t_2", { id: "t_2", state: "queued", importance_prior: 0.5 } as Topic)
+	a = allocate(b, { type: EV.TopicsProposed, payload: { topicIds: ["t_2"], skipped: [], round: 1 } }, cfg, 4)
+	assert.deepEqual(assigns(a).map((x) => [x.slotId, x.topicId]), [["s1", "t_2"]])
+	// The round spends the money down: the next quiet board goes to analysis.
+	allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.9, impact: 0.2, rationale: "seed" } }, cfg, 5)
+	allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_2", slotId: "an1", spent: { usd: 3.5 } } }, cfg, 6)
+	a = allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_2", slotId: "an1", role: "analyst" } }, cfg, 7)
+	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
+	assert.ok(!a.some((x) => x.type === EV.ReplanRequested))
+})
+
+test("replan: an empty round, a Planner that never answers, or rounds used up each end in analysis", () => {
+	let b = board([{ id: "t_1", state: "closed" }], { s1: "scout" }, { usd: 5 })
+	let a = allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	assert.ok(a.some((x) => x.type === EV.ReplanRequested))
+	a = allocate(b, { type: EV.TopicsProposed, payload: { topicIds: [], skipped: [], round: 1 } }, cfg, 1)
+	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
+
+	b = board([{ id: "t_1", state: "closed" }], { s1: "scout" }, { usd: 5 })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 0)
+	assert.equal(allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, cfg.taskTimeoutMs - 1).length, 0)
+	assert.ok(allocate(b, { type: EV.AllocatorTick, payload: {} }, cfg, cfg.taskTimeoutMs).some((x) => x.type === EV.AnalysisRequested))
+
+	b = board([{ id: "t_1", state: "closed" }], { s1: "scout" }, { usd: 5 })
+	a = allocate(b, { type: EV.TopicApproved, payload: {} }, { ...cfg, maxReplanRounds: 0 }, 0)
+	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
+	assert.ok(!a.some((x) => x.type === EV.ReplanRequested))
+})

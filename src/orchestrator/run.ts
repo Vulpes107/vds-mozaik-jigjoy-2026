@@ -51,7 +51,7 @@ export function startRun(profile: Obj, opts: RunOptions = {}): RunState {
 export function resumeRun(runId: string, opts: RunOptions = {}): RunState {
 	const dir = opts.snapshotDir ?? "data"
 	const state = restore(startRuntime(runId), readSnapshot(runId, dir))
-	const cartographer = joinParticipants(state, { ...opts, planner: state.topics.size === 0 && opts.planner !== false })
+	const cartographer = joinParticipants(state, opts) // the Planner skips a board that already has topics, but stays for replan rounds
 	if (state.checkpoints.get("cp_topics")?.status === "approved") {
 		sendEvent(SemanticEvent.create(EV.TopicApproved, cartographer.getId(), {}), cartographer.getId())
 	}

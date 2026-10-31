@@ -21,5 +21,14 @@
     "from_topic_id": "t_002",
     "topic_id": "t_001",
     "detail": "Highest priority topic (0.255)"
+  },
+  {
+    "schema_version": "1.0",
+    "seq": 43,
+    "ts": "2026-10-30T10:12:00Z",
+    "run_id": "r_demo1",
+    "type": "replan_requested",
+    "agent_role": "allocator",
+    "detail": "round 1: 1.8 usd, 700 seconds of research budget left"
   }
 ]

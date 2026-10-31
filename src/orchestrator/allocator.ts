@@ -5,12 +5,14 @@ import type { Budget, Slot } from "../shared/runtime.ts"
 import {
 	EV,
 	type ReassignmentRequestedPayload,
+	type ReplanRequestedPayload,
 	type ResearchGapPayload,
 	type SlotIdlePayload,
 	type SpendRecordedPayload,
 	type TaskFinishedPayload,
 	type TopicProgressPayload,
 	type TopicScoredPayload,
+	type TopicsProposedPayload,
 	type WorkerRole,
 } from "../shared/events.ts"
 
@@ -62,6 +64,10 @@ export interface AllocatorConfig {
 	taskTimeoutMs: number
 	/** Share of each budget line kept for the analysis stages, which run after research: max(fraction x limit, absolute), never more than half. */
 	analysisReserve: { fraction: number; usd: number; seconds: number; tokens: number }
+	/** Planning estimate per deep topic (collector+analyst+verifier trio); sizes the agenda and decides whether leftover budget buys another round. */
+	topicCost: { usd: number; seconds: number }
+	/** Follow-up planning rounds when every topic is done and at least one topic's worth of research budget is left. 0 disables. */
+	maxReplanRounds: number
 }
 
 export const defaultConfig: AllocatorConfig = {
@@ -76,6 +82,10 @@ export const defaultConfig: AllocatorConfig = {
 	warnAt: 0.8,
 	taskTimeoutMs: 420_000, // above research's own per-task limits (<= 360 s), so workers time themselves out first
 	analysisReserve: { fraction: 0.25, usd: 0.75, seconds: 240, tokens: 300_000 }, // the 2026-10-31 live run: analysis took 0.57 USD and 150 s after research stopped
+	// Live runs on 2026-10-31 (Haiku workers) measured ~0.3 USD / ~1 min per topic with staged roles. Set at that measurement
+	// (was 0.45 / 150, which left a third of a 5 USD run unspent); overruns end as research_incomplete, so erring low is safe.
+	topicCost: { usd: 0.3, seconds: 100 },
+	maxReplanRounds: 3,
 }
 
 /** The part of one budget line research may spend; the rest is kept for analysis. Search calls are research-only, so no reserve. */
@@ -88,6 +98,19 @@ export function researchBudget(b: Budget, cfg: AllocatorConfig = defaultConfig):
 	return Object.fromEntries((Object.entries(b) as [keyof Budget, number | undefined][]).filter(([, v]) => v !== undefined).map(([k, v]) => [k, researchLimit(k, v!, cfg)]))
 }
 
+/** Research budget still unspent on the lines the run limits, or undefined when it is not enough for one more topic. */
+export function replanBudget(board: Board, cfg: AllocatorConfig = defaultConfig): ReplanRequestedPayload["remaining"] | undefined {
+	const r: ReplanRequestedPayload["remaining"] = {}
+	for (const k of ["usd", "seconds"] as const) {
+		const full = board.runBudget[k]
+		if (!full) continue
+		const left = researchLimit(k, full, cfg) - board.spent[k]
+		if (left < cfg.topicCost[k]) return undefined
+		r[k] = left
+	}
+	return Object.keys(r).length ? r : undefined
+}
+
 export type Action =
 	| { type: typeof EV.TopicStateChanged; topicId: string; from: TopicState; to: TopicState; reason: string }
 	| { type: typeof EV.TopicDropped; topicId: string; reason: string }
@@ -95,6 +118,7 @@ export type Action =
 	| { type: typeof EV.BudgetWarning; line: keyof Budget; used: number; limit: number; reserved: number }
 	| { type: typeof EV.BudgetExhausted; line: keyof Budget; used: number; limit: number; reserved: number }
 	| { type: typeof EV.AnalysisRequested; unresolvedTopicIds: string[]; droppedTopicIds: string[] }
+	| ({ type: typeof EV.ReplanRequested } & ReplanRequestedPayload)
 
 export interface Incoming {
 	type: string
@@ -112,10 +136,21 @@ const ROLES_NEEDED: Record<string, WorkerRole[]> = {
 }
 
 // Per-board scratch state that is not part of the Topic contract.
-const history = new WeakMap<Board, { confidence: Map<string, number[]>; rolesDone: Map<string, Set<WorkerRole>>; warned: Set<string>; analysisRequested: boolean; approved: boolean; planReady: boolean }>()
+interface Scratch {
+	confidence: Map<string, number[]>
+	rolesDone: Map<string, Set<WorkerRole>>
+	warned: Set<string>
+	analysisRequested: boolean
+	approved: boolean
+	planReady: boolean
+	/** Follow-up rounds requested so far, and when the pending one was asked for (undefined: none pending). */
+	replans: number
+	replanAskedAt?: number
+}
+const history = new WeakMap<Board, Scratch>()
 function scratch(board: Board) {
 	let s = history.get(board)
-	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false, planReady: false }))
+	if (!s) history.set(board, (s = { confidence: new Map(), rolesDone: new Map(), warned: new Set(), analysisRequested: false, approved: false, planReady: false, replans: 0 }))
 	return s
 }
 
@@ -280,6 +315,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			sc.planReady = true // the run is over: the clock stops
 			break
 		}
+		case EV.TopicsProposed: {
+			// The Planner answered a replan request. An empty round means nothing left is worth the money.
+			if (sc.replanAskedAt === undefined) break
+			sc.replanAskedAt = undefined
+			if (!(event.payload as TopicsProposedPayload).topicIds?.length) sc.replans = cfg.maxReplanRounds
+			break
+		}
 		case EV.AllocatorTick: {
 			if (board.startedAt !== undefined && !sc.planReady) board.spent.seconds = Math.floor((now - board.startedAt) / 1000)
 			for (const [id, s] of board.slots) {
@@ -350,10 +392,21 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		}
 	}
 
-	// Stop condition: nothing live and nothing running, or budget gone.
+	// Stop condition: nothing live and nothing running, or budget gone. With a topic's worth of research budget left,
+	// ask the Planner for a follow-up round first (bounded by maxReplanRounds; a Planner that never answers is timed out).
 	const live = [...board.topics.values()].filter((t) => LIVE.includes(t.state))
 	const busy = [...board.slots.values()].some((s) => s.topicId !== null)
-	if (!sc.analysisRequested && board.topics.size > 0 && (exhausted || (live.length === 0 && !busy))) {
+	const idle = live.length === 0 && !busy
+	if (sc.replanAskedAt !== undefined && now - sc.replanAskedAt >= cfg.taskTimeoutMs) {
+		sc.replanAskedAt = undefined
+		sc.replans = cfg.maxReplanRounds
+	}
+	const remaining = !exhausted && idle && sc.approved && sc.replanAskedAt === undefined && sc.replans < cfg.maxReplanRounds ? replanBudget(board, cfg) : undefined
+	if (!sc.analysisRequested && remaining) {
+		sc.replans++
+		sc.replanAskedAt = now
+		out.push({ type: EV.ReplanRequested, remaining, round: sc.replans })
+	} else if (!sc.analysisRequested && board.topics.size > 0 && (exhausted || (idle && sc.replanAskedAt === undefined))) {
 		sc.analysisRequested = true
 		out.push({
 			type: EV.AnalysisRequested,
