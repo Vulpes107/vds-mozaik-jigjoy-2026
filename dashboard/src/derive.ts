@@ -114,3 +114,75 @@ export function toMarkdown(plan: BusinessPlan, scenarios: Scenario[], assumption
 	L.push("", `> ${plan.disclaimer}`)
 	return L.join("\n")
 }
+
+// ---------- plain-language readings of each chart (generated from the data, so they never go stale) ----------
+const k = (n: number): string => {
+	const a = Math.abs(n)
+	const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${Math.round(a / 1e3)}k` : `${Math.round(a)}`
+	return n < 0 ? `−${s}` : s
+}
+
+export interface CashFacts {
+	name: string
+	lowMonth: number
+	lowValue: number
+	belowFrom: number | null
+	recoversAt: number | null
+	end: number
+}
+export function cashFacts(name: string, pts: CashPoint[]): CashFacts {
+	const low = pts.reduce((m, p) => (p.cash < m.cash ? p : m), pts[0]!)
+	const below = firstBelowZero(pts)
+	const rec = below === null ? null : (pts.find((p) => p.month > below && p.cash >= 0)?.month ?? null)
+	return { name, lowMonth: low.month, lowValue: low.cash, belowFrom: below, recoversAt: rec, end: pts[pts.length - 1]!.cash }
+}
+export function cashStory(facts: CashFacts[], cur: string): string[] {
+	return facts.map((f) => {
+		if (f.belowFrom === null) return `${f.name}: cash never drops below zero. Lowest point ${k(f.lowValue)} ${cur} (month ${f.lowMonth}); ends at ${k(f.end)}.`
+		const back = f.recoversAt === null ? "and does not recover within the horizon" : `and is back above zero in month ${f.recoversAt}`
+		return `${f.name}: cash goes below zero in month ${f.belowFrom}, bottoms out at ${k(f.lowValue)} ${cur} in month ${f.lowMonth}, ${back}. Ends at ${k(f.end)}.`
+	})
+}
+
+export function npvStory(groups: ScenarioGroup[], cur: string): string[] {
+	const rows = groups.filter((g) => g.base.metrics?.npv !== undefined).sort((a, b) => b.base.metrics!.npv! - a.base.metrics!.npv!)
+	if (!rows.length) return ["No scenario has been valued yet."]
+	const out = [`Highest base-case value: ${rows[0]!.name} at ${k(rows[0]!.base.metrics!.npv!)} ${cur}.`]
+	const base = groups.find((g) => g.kind === "do_nothing")
+	if (base && rows[0] !== undefined && rows[0].kind !== "do_nothing") out.push(`That is ${k(rows[0].base.metrics!.npv! - (base.base.metrics?.npv ?? 0))} ${cur} better than doing nothing.`)
+	const breached = groups.filter((g) => g.base.metrics?.runway_breached).map((g) => g.name)
+	if (breached.length) out.push(`${breached.join(", ")} runs out of cash before it recovers, so a higher value does not mean it is affordable (see the cash chart).`)
+	out.push(groups.some((g) => g.low) ? "Each bar spans the adverse to the favourable case." : "Only the base case exists, so no uncertainty band is drawn yet.")
+	return out
+}
+
+export function mapStory(topics: Topic[]): string[] {
+	const live = topics.filter((t) => t.state !== "dropped" && t.confidence !== undefined)
+	const need = live.filter((t) => (t.impact ?? t.importance_prior) >= 0.5 && (t.confidence ?? 0) < 0.5)
+	const out: string[] = []
+	if (need.length) out.push(`${need.map((t) => t.id).join(", ")} matter a lot but are poorly evidenced. More research would change the plan most here.`)
+	else if (live.length) out.push("No high-impact topic is poorly evidenced.")
+	const inc = topics.filter((t) => t.state === "research_incomplete")
+	if (inc.length) out.push(`${inc.length} topic${inc.length > 1 ? "s" : ""} could not be finished (${inc.map((t) => t.id).join(", ")}). Hollow markers.`)
+	const dr = topics.filter((t) => t.state === "dropped")
+	if (dr.length) out.push(`${dr.length} dropped as irrelevant: ${dr.map((t) => `${t.id} (${t.state_reason ?? "low relevance"})`).join("; ")}`)
+	return out
+}
+
+export function riskStory(risks: BusinessPlan["risks"]): string[] {
+	if (!risks.length) return []
+	const s = [...risks].sort((a, b) => riskScore(b) - riskScore(a))
+	const hot = s.filter((r) => riskScore(r) >= 0.4)
+	return [`${hot.length} of ${s.length} risks score 0.40 or more (likelihood × severity).`, `Largest: ${s[0]!.title} (${riskScore(s[0]!).toFixed(2)}).`]
+}
+
+export function moveStory(events: AgentEvent[], upTo: number): string | null {
+	const e = events.slice(0, upTo).filter((x) => x.type === "agent_reassigned").at(-1)
+	if (!e) return null
+	return `${e.agent_id} moved ${e.from_topic_id ? `from ${e.from_topic_id} ` : ""}to ${e.topic_id}${e.detail ? `: ${e.detail.charAt(0).toLowerCase()}${e.detail.slice(1)}` : ""}.`
+}
+
+export function sourceStats(sources: { reliability: number; injection_flagged?: boolean; source_type?: string }[]) {
+	const n = sources.length
+	return { n, flagged: sources.filter((s) => s.injection_flagged).length, avg: n ? sources.reduce((a, s) => a + s.reliability, 0) / n : 0, weak: sources.filter((s) => s.reliability < 0.5).length }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { Assumption, BusinessPlan, Finding, Scenario, Source } from "../types/contracts.ts"
-import { effective } from "../derive.ts"
+import type { Finding, Source } from "../types/contracts.ts"
+import { sourceStats } from "../derive.ts"
 import { confWord, dateOnly, pct } from "../fmt.ts"
 import { Chip, Section } from "../ui.tsx"
 
@@ -31,24 +31,7 @@ function FindingRow({ f, sources, top, hl }: { f: Finding; sources: Map<string, 
 	)
 }
 
-function Why({ plan, rec, findings, scenarios, assumptions }: { plan: BusinessPlan; rec: BusinessPlan["recommendations"][number]; findings: Map<string, Finding>; scenarios: Scenario[]; assumptions: Assumption[] }) {
-	const sc = scenarios.filter((s) => rec.scenario_ids?.includes(s.id))
-	const as = assumptions.filter((a) => sc.some((s) => s.assumption_ids.includes(a.id)) || plan.assumption_ids.includes(a.id))
-	return (
-		<div className="why">
-			<strong>Evidence behind this</strong>
-			<ul>
-				{rec.finding_ids.length === 0 && <li>No findings cited. Treat this as judgement.</li>}
-				{rec.finding_ids.map((id) => <li key={id}>{findings.get(id)?.claim ?? `${id} (not found)`} <span className="asof">{id}</span></li>)}
-			</ul>
-			<strong style={{ display: "block", marginTop: 10 }}>Assumptions it depends on</strong>
-			<ul>{as.map((a) => <li key={a.id}>{a.text}: <span className="num">{effective(a)}</span> {a.unit} ({a.low}–{a.high})</li>)}</ul>
-		</div>
-	)
-}
-
-export function Evidence({ plan, findings, sources, scenarios, assumptions, focus }: { plan?: BusinessPlan; findings: Finding[]; sources: Source[]; scenarios: Scenario[]; assumptions: Assumption[]; focus: string[] }) {
-	const [open, setOpen] = useState<number | null>(null)
+export function Evidence({ findings, sources, focus }: { findings: Finding[]; sources: Source[]; focus: string[] }) {
 	const [q, setQ] = useState("")
 	const [only, setOnly] = useState<"all" | "conflict" | "stale" | "unverified">("all")
 	const [scroll, setScroll] = useState(0)
@@ -65,38 +48,46 @@ export function Evidence({ plan, findings, sources, scenarios, assumptions, focu
 	}, [focus, shown])
 	const first = Math.max(0, Math.floor(scroll / ROW) - 3)
 	const last = Math.min(shown.length, Math.ceil((scroll + VIEW) / ROW) + 3)
-	const flagged = sources.filter((s) => s.injection_flagged)
+	const stats = sourceStats(sources)
 	return (
-		<Section id="evidence" n="08" title="Evidence" lede="Every recommendation links to the findings and assumptions behind it. Open “Why this?” to see them.">
-			{plan && (
-				<ol className="recs">
-					{plan.recommendations.map((r, i) => (
-						<li key={r.rank} className="rec">
-							<span className="n">{r.rank}</span>
-							<div>
-								<h3>{r.title} <span className="asof">confidence {pct(r.confidence)}</span></h3>
-								<p>{r.rationale}</p>
-								{r.what_would_change_this && <p className="note">Would change if: {r.what_would_change_this}</p>}
-								<button className="btn link" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}>Why this?</button>
-								{open === i && <Why plan={plan} rec={r} findings={byId} scenarios={scenarios} assumptions={assumptions} />}
-							</div>
-						</li>
-					))}
-				</ol>
-			)}
-			{flagged.length > 0 && <p className="banner crit" role="alert"><b>{flagged.length} source{flagged.length > 1 ? "s" : ""} flagged for prompt injection</b>Their text was treated as data and is excluded from agent instructions.</p>}
-			<h3 className="sub" style={{ marginTop: 24 }}>Findings ({shown.length}{shown.length !== findings.length ? ` of ${findings.length}` : ""})</h3>
-			<div className="filters">
-				<input type="search" placeholder="Search claims" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search claims" />
-				{(["all", "conflict", "stale", "unverified"] as const).map((k) => <button key={k} className="btn" aria-pressed={only === k} style={only === k ? { borderColor: "var(--ink)" } : undefined} onClick={() => setOnly(k)}>{k}</button>)}
-			</div>
-			{shown.length === 0 ? <p className="note">{findings.length ? "Nothing matches." : "No findings yet."}</p> : (
-				<div className="vlist" ref={box} onScroll={(e) => setScroll(e.currentTarget.scrollTop)} tabIndex={0} aria-label="Findings list">
-					<div style={{ height: shown.length * ROW, position: "relative" }}>
-						{shown.slice(first, last).map((f, i) => <FindingRow key={f.id} f={f} sources={srcById} top={(first + i) * ROW} hl={focus.includes(f.id)} />)}
+		<Section id="evidence" title="The evidence" lede="Every claim the agents collected and where it came from. Click “findings” on an assumption, or “Why this?” on a recommendation, to jump to the evidence behind it.">
+			<div className="cols-8-4">
+				<div>
+					<h3 className="sub">Findings ({shown.length}{shown.length !== findings.length ? ` of ${findings.length}` : ""})</h3>
+					<div className="filters">
+						<input type="search" placeholder="Search claims" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search claims" />
+						{(["all", "conflict", "stale", "unverified"] as const).map((kk) => <button key={kk} className="btn" aria-pressed={only === kk} style={only === kk ? { borderColor: "var(--ink)" } : undefined} onClick={() => setOnly(kk)}>{kk}</button>)}
 					</div>
+					{shown.length === 0 ? <p className="note">{findings.length ? "Nothing matches." : "No findings yet."}</p> : (
+						<div className="vlist" style={{ height: Math.min(VIEW, shown.length * ROW + 2) }} ref={box} onScroll={(e) => setScroll(e.currentTarget.scrollTop)} tabIndex={0} aria-label="Findings list">
+							<div style={{ height: shown.length * ROW, position: "relative" }}>
+								{shown.slice(first, last).map((f, i) => <FindingRow key={f.id} f={f} sources={srcById} top={(first + i) * ROW} hl={focus.includes(f.id)} />)}
+							</div>
+						</div>
+					)}
 				</div>
-			)}
+				<div>
+					<h3 className="sub">Source check</h3>
+					<ul className="facts">
+						<li><b className="num">{stats.n}</b> sources used</li>
+						<li><b className="num">{pct(stats.avg)}</b> average reliability</li>
+						<li><b className="num">{stats.weak}</b> below 50% reliability</li>
+						<li className={stats.flagged ? "bad" : ""}><b className="num">{stats.flagged}</b> flagged for prompt injection</li>
+						<li><b className="num">{findings.filter((f) => (f.conflicts_with?.length ?? 0) > 0).length}</b> findings in conflict</li>
+						<li><b className="num">{findings.filter((f) => f.stale).length}</b> stale findings</li>
+					</ul>
+					{stats.flagged > 0 && <p className="banner crit" role="alert"><b>Injection attempt</b>Flagged text was treated as data only and never used as instructions.</p>}
+					<ul className="srcs">
+						{[...sources].sort((a, b) => b.reliability - a.reliability).map((s) => (
+							<li key={s.id}>
+								<a href={s.url} target="_blank" rel="noreferrer noopener">{s.title ?? s.publisher ?? s.url}</a>
+								<span className="meta"><span className="asof">{s.id}</span> {s.source_type ?? "source"} {s.injection_flagged && <Chip kind="flag">flagged</Chip>}</span>
+								<span className="bar" role="meter" aria-label="Reliability" aria-valuenow={Math.round(s.reliability * 100)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${s.reliability * 100}%` }} /></span>
+							</li>
+						))}
+					</ul>
+				</div>
+			</div>
 		</Section>
 	)
 }

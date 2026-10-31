@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { AgentEvent, Topic } from "../types/contracts.ts"
-import { allocationAt, droppedAt } from "../derive.ts"
+import { allocationAt, droppedAt, moveStory } from "../derive.ts"
 import { label } from "../fmt.ts"
 import { Glyph, Section, roleStyle } from "../ui.tsx"
 
@@ -44,7 +44,7 @@ export function Activity({ events, topics }: { events: AgentEvent[]; topics: Top
 	const idle = agents.filter((a) => !a.topicId || !byId.has(a.topicId))
 	const shown = events.slice(0, upTo)
 	return (
-		<Section id="activity" n="05" title="Agent activity" lede="Workers are allocated to topics by priority. When a topic is dropped, its agent moves to the topic where it helps most." keep>
+		<Section id="activity" title="The agents at work" lede="Workers are assigned to research topics by priority. When a topic turns out to be irrelevant it is dropped, and its worker moves to the topic where it helps most." keep>
 			{events.length > 0 && (
 				<div className="replay">
 					<button className="btn" onClick={() => setPos(pos === null ? events.length : null)} aria-pressed={pos === null}>{pos === null ? "Following live" : "Go live"}</button>
@@ -57,9 +57,10 @@ export function Activity({ events, topics }: { events: AgentEvent[]; topics: Top
 				{ROLES.map((r) => <span key={r}><Glyph role={r} />{r}</span>)}
 				<span><Glyph role="other" />other</span>
 			</div>
+			{moveStory(events, upTo) && <p className="callout"><b>Latest reassignment.</b> {moveStory(events, upTo)}</p>}
 			<div className="activity">
 				<div>
-					<h3 className="sub">Event feed</h3>
+					<h3 className="sub">Event feed (newest first)</h3>
 					{shown.length === 0 ? <p className="note">No events yet. Agents start once you approve the topic list.</p> : (
 						<ol className="feed" aria-live="polite" aria-label="Agent events">
 							{[...shown].reverse().map((e, i) => (
@@ -76,7 +77,7 @@ export function Activity({ events, topics }: { events: AgentEvent[]; topics: Top
 					)}
 				</div>
 				<div>
-					<h3 className="sub">Allocation</h3>
+					<h3 className="sub">Who is working on what</h3>
 					<div className="lanes">
 						{lanes.map((t) => {
 							const here = agents.filter((a) => a.topicId === t.id)
