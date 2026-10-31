@@ -15,11 +15,13 @@ import { SourceLibrary } from "./sources.ts"
 import { ResearchStore } from "./store.ts"
 import { type CacheStore, FileCache, LayeredCache } from "./tools/cache.ts"
 import { ResearchGateway, type GatewayLimits } from "./tools/gateway.ts"
-import type { FetchProvider, ResearchExtras, SearchProvider } from "./tools/provider.ts"
+import { firecrawlProviders } from "./tools/firecrawl.ts"
 import { parallelProviders } from "./tools/parallel.ts"
+import type { FetchProvider, ResearchExtras, SearchProvider } from "./tools/provider.ts"
 import { LiveRedactor } from "./tools/redact.ts"
 import { RateLimiter, type RetryPolicy, defaultRetry } from "./tools/resilience.ts"
 import { tavilyProviders } from "./tools/tavily.ts"
+import { youProviders } from "./tools/you.ts"
 import { CallBudget, UsageMeter } from "./tools/usage.ts"
 import { type Clock, systemClock } from "./types.ts"
 
@@ -140,14 +142,24 @@ export function startResearch(opts: ResearchOptions): ResearchSystem {
 export * from "./tools/provider.ts"
 export { tavilyProviders, createTavilyClient } from "./tools/tavily.ts"
 export { parallelProviders, ParallelMcpClient, ParallelSearchProvider, ParallelFetchProvider } from "./tools/parallel.ts"
+export { youProviders, YouMcpClient, YouSearchProvider } from "./tools/you.ts"
+export { firecrawlProviders, FirecrawlSearchProvider, FirecrawlFetchProvider } from "./tools/firecrawl.ts"
 
 /**
- * Tavily first, Parallel's accountless Search MCP as the fallback when Tavily is rate-limited/down (gateway.ts's
- * `callProviders` already tries providers in array order and only records a gap once every provider has failed).
- * Parallel has no `map`/`crawl`/`research` extras, so those stay on Tavily alone.
+ * Tavily first, then three free/accountless fallbacks in order when Tavily is rate-limited/down: Parallel's
+ * Search MCP, You.com's keyless Search MCP (search only, no fetch tool on the free profile), and Firecrawl's
+ * keyless search+scrape. `gateway.ts`'s `callProviders` already tries providers in array order and only records
+ * a gap once every provider has failed, so no gateway change is needed to add a provider here.
+ * Tavily-only `map`/`crawl`/`research` extras are unaffected; none of the fallbacks offer them.
  */
-export function tavilyWithParallelFallback(opts: { parallelApiKey?: string } = {}) {
+export function tavilyWithFallbacks(opts: { parallelApiKey?: string; firecrawlApiKey?: string } = {}) {
 	const tav = tavilyProviders()
 	const par = parallelProviders({ apiKey: opts.parallelApiKey })
-	return { searchProviders: [tav.search, par.search], fetchProviders: [tav.fetch, par.fetch], extras: tav.extras }
+	const you = youProviders()
+	const fc = firecrawlProviders({ apiKey: opts.firecrawlApiKey })
+	return {
+		searchProviders: [tav.search, par.search, you.search, fc.search],
+		fetchProviders: [tav.fetch, par.fetch, fc.fetch],
+		extras: tav.extras,
+	}
 }

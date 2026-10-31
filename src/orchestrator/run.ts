@@ -3,7 +3,7 @@ import { SemanticEvent } from "@mozaik-ai/core"
 import { EV, type WorkerRole } from "../shared/events.ts"
 import { join, sendEvent, startRuntime, type Budget, type Obj, type RunState } from "../shared/runtime.ts"
 import { AnalysisSession, registerAnalysis } from "../analysis/index.ts"
-import { startResearch, tavilyWithParallelFallback, type FetchProvider, type ResearchExtras, type SearchProvider } from "../research/index.ts"
+import { startResearch, tavilyWithFallbacks, type FetchProvider, type ResearchExtras, type SearchProvider } from "../research/index.ts"
 import { validate } from "../shared/validate.ts"
 import { makeAllocator } from "./allocator-participant.ts"
 import { defaultConfig, type AllocatorConfig } from "./allocator.ts"
@@ -72,8 +72,8 @@ export function stopRun(reason: string): void {
 }
 
 function tavilyAsProviders() {
-	// Tavily first, Parallel's accountless Search MCP as the fallback when Tavily is rate-limited/down.
-	return tavilyWithParallelFallback()
+	// Tavily first, then free/accountless fallbacks (Parallel, You.com, Firecrawl) when Tavily is rate-limited/down.
+	return tavilyWithFallbacks()
 }
 
 function joinParticipants(state: RunState, opts: RunOptions) {
