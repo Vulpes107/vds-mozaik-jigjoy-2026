@@ -77,7 +77,7 @@ export function Figure({ title, question, read, now, children }: { title: string
 				{children}
 			</div>
 			<figcaption className="fig-aside">
-				<h4>How to read it</h4>
+				<h4>What you are looking at</h4>
 				<ul>{read.map((r) => <li key={r}>{r}</li>)}</ul>
 				<h4>What it shows right now</h4>
 				<ul className="now">{now.map((r) => <li key={r}>{r}</li>)}</ul>
