@@ -27,6 +27,14 @@ test("tools: upsert_assumption validates ranges and finding ids with fixable mes
 	assert.equal(state.assumptions.size, 1)
 })
 
+test("tools: supported assumption confidence is capped by the evidence behind it", async () => {
+	const { call } = setup()
+	const r = (await call("upsert_assumption", upsert({ confidence: 0.95 }))) as { confidence: number }
+	assert.equal(r.confidence, 0.8) // f_001 carries 0.8; the model's 0.95 is only an upper bound
+	const lower = (await call("upsert_assumption", upsert({ id: "as_001", confidence: 0.5 }))) as { confidence: number }
+	assert.equal(lower.confidence, 0.5)
+})
+
 test("tools: unsupported assumptions are stored as defaults with capped confidence", async () => {
 	const { call, state } = setup()
 	const r = (await call("upsert_assumption", upsert({ basis_finding_ids: [], confidence: 0.95 }))) as { origin: string; confidence: number }

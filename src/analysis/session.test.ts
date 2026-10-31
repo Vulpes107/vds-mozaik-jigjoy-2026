@@ -15,7 +15,7 @@ test("ensureBaseline: no do_nothing scenario from the model -> illustrative base
 	assert.equal(session.ensureBaseline(), true)
 	assert.equal(session.ensureBaseline(), false) // idempotent
 	assert.equal(state.assumptions.size, 2)
-	for (const a of state.assumptions.values()) assert.equal(a.origin, "default")
+	for (const a of state.assumptions.values()) assert.equal(a.origin, "user") // the profile stated these figures
 	const out = session.recompute()
 	assert.ok(out)
 	assertValid("business_plan", out.plan)
@@ -29,5 +29,6 @@ test("ensureBaseline: a profile without financials still yields a valid (zero) b
 	state.profile = { id: "p_2", name: "X" }
 	const session = new AnalysisSession(state)
 	assert.equal(session.ensureBaseline(), true)
+	for (const a of state.assumptions.values()) assert.equal(a.origin, "default")
 	assert.ok(session.recompute())
 })

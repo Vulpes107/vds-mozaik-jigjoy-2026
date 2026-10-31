@@ -137,7 +137,7 @@ test("plan: no findings -> low confidence and an explicit 'illustrative' caveat"
 	assert.ok(out.plan.risks.some((r) => r.id === "rk_dataGap")) // no company financials
 })
 
-test("plan: unresolved and dropped topics are disclosed and reduce confidence", () => {
+test("plan: unresolved and dropped topics are disclosed but do not lower confidence", () => {
 	const clean = assemblePlan(input())
 	const out = assemblePlan(
 		input({
@@ -153,7 +153,7 @@ test("plan: unresolved and dropped topics are disclosed and reduce confidence", 
 	validateAll(out)
 	assert.deepEqual(out.plan.unresolved_topic_ids, ["t_003", "t_004"])
 	assert.deepEqual(out.plan.dropped_topic_ids, ["t_002"])
-	assert.ok(out.plan.overall_confidence < clean.plan.overall_confidence)
+	assert.equal(out.plan.overall_confidence, clean.plan.overall_confidence)
 	assert.ok(out.plan.risks.some((r) => r.id === "rk_evidenceGap"))
 })
 
