@@ -24,6 +24,36 @@ npx @mozaik-ai/cloud-sdk pair
 
 It prints an approve link. Open it where you're signed in to app.jigjoy.ai and the key is saved to `~/.mozaik/credentials.json`. In the devcontainer that file is lost when the container is rebuilt, so `.env` is the sturdier option there.
 
+### Tavily (web search, required for real runs)
+
+The research agents search and read the web through [Tavily](https://tavily.com) (`@tavily/core`, installed by `npm install`). Without `TAVILY_API_KEY` a real run cannot research anything; the mock server and `npm run check` need no key.
+
+Get a key at app.tavily.com and put it in `.env`. A free key has a small monthly quota and one full run uses a few hundred calls, so you can list **several keys, comma-separated**:
+
+```bash
+TAVILY_API_KEY=tvly-key1,tvly-key2,tvly-key3
+```
+
+Keys are used one after another: every call goes to the current key, and when it fails with a quota/rate-limit or auth error the next key takes over and the call is retried there (`withKeyFailover` in `src/research/tools/tavily.ts`). If every key is exhausted, search falls back to Parallel's free Search MCP (no key needed; `PARALLEL_API_KEY` only raises its rate limit). `map`/`crawl`/`research` exist only on Tavily, so those stop working when the Tavily keys run out.
+
+Each machine uses its own keys. `.env` always wins over variables exported in your shell (the server logs which ones it overrode), so a stale `TAVILY_API_KEY` in your shell profile is ignored.
+
+## Start the app
+
+Two processes: the API server (orchestrator + agents, port 8787) and the dashboard (Vite, port 5173, proxies `/runs` to 8787). Run both from the repo root, in the devcontainer or locally:
+
+```bash
+npm install && (cd dashboard && npm install)                    # once
+node --env-file=.env --import tsx src/orchestrator/server.ts   # terminal 1: API on http://localhost:8787
+cd dashboard && npm run dev                                     # terminal 2: open http://localhost:5173
+```
+
+Then in the browser: fill in the company form (the run limits default to the recommended values; **Use recommended values** fills the rest), press **Start run**, approve the topic list when the banner asks, and the plan appears when research and analysis finish. Previous runs are listed beside the form.
+
+- **No keys, UI only:** start `node dashboard/mock-server/server.mjs` instead of the API server. It serves the fixtures in `mocks/` and replays a recorded run.
+- **One run at a time:** the server hosts one live run; starting another while it runs offers to stop the old one.
+- **Stop:** Ctrl+C in both terminals. Finished runs are kept in `data/mozaik.db` and stay readable after a restart. Restart the server after pulling code changes; it does not reload.
+
 ## Run
 
 Mozaik cloud reads `.env` itself, but the provider SDKs don't, so load it with Node:
@@ -40,7 +70,7 @@ A multi-agent system that researches a company's market and produces a costed bu
 
 ### Running a full pass
 
-Keys in `.env` (copy `.example.env`): `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` (the team gateway: Sonnet 4.6 and Haiku 4.5 only), `TAVILY_API_KEY` (search), optional `MOZAIK_API_KEY` (live view on app.jigjoy.ai). Then:
+Keys in `.env` (copy `.example.env`): `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY` (the team gateway: Sonnet 4.6 and Haiku 4.5 only), `TAVILY_API_KEY` (search, one or more keys; see [Tavily](#tavily-web-search-required-for-real-runs)), optional `MOZAIK_API_KEY` (live view on app.jigjoy.ai). Then:
 
 ```bash
 npm install && npm run check                                   # fixtures, types, 187 tests; no keys needed
