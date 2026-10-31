@@ -22,6 +22,8 @@ export const EV = {
 	BudgetWarning: "budget.warning",
 	BudgetExhausted: "budget.exhausted",
 	AnalysisRequested: "analysis.requested",
+	/** Allocator (A): every topic is done but research budget is left; the Planner proposes a follow-up round. */
+	ReplanRequested: "replan.requested",
 	ScenarioComputed: "scenario.computed",
 	PlanReady: "plan.ready",
 	CheckpointRequested: "checkpoint.requested",
@@ -122,6 +124,20 @@ export interface AssumptionOverriddenPayload {
 	assumptionId: string
 	/** null clears the override. */
 	value: number | null
+}
+
+export interface TopicsProposedPayload {
+	topicIds: string[]
+	skipped: { category: string; reason: string }[]
+	/** 0 for the initial agenda, then the replan round that produced these topics. */
+	round: number
+}
+
+export interface ReplanRequestedPayload {
+	/** Research budget still unspent, per line that the run limits (usd, seconds). */
+	remaining: { usd?: number; seconds?: number }
+	/** 1 for the first follow-up round. */
+	round: number
 }
 
 export interface SpendRecordedPayload {

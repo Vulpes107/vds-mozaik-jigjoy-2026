@@ -29,6 +29,10 @@ const MAP: Record<string, (p: P) => Partial<Obj> | null> = {
 	[EV.InjectionFlagged]: (p) => ({ type: "injection_flagged", ref_id: p.id, topic_id: p.topicId, detail: p.detail }),
 	[EV.BudgetWarning]: (p) => ({ type: "budget_warning", detail: budgetLine(p) }),
 	[EV.BudgetExhausted]: (p) => ({ type: "budget_exhausted", detail: budgetLine(p) }),
+	[EV.ReplanRequested]: (p) => {
+		const r = p.remaining as Record<string, number>
+		return { type: "replan_requested", detail: `round ${p.round}: ${Object.entries(r).map(([k, v]) => `${r2(v)} ${k}`).join(", ")} of research budget left` }
+	},
 	[EV.AnalysisRequested]: (p) => ({ type: "analysis_started", detail: `${(p.unresolvedTopicIds as string[])?.length ?? 0} unresolved` }),
 	[EV.ScenarioComputed]: (p) => ({ type: "scenario_computed", ref_id: p.id }),
 	[EV.PlanReady]: () => ({ type: "plan_ready" }),

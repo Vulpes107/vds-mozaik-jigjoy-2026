@@ -24,6 +24,8 @@ export function makeOperator(opts: { autoApprove?: boolean } = {}) {
 				processor: {
 					apply: ({ participant }) => {
 						const { checkpoints } = resolveRuntime().state
+						// Follow-up rounds (replan) spend the budget the human already approved; only the initial agenda is a checkpoint.
+						if (checkpoints.has(TOPICS_CHECKPOINT)) return
 						checkpoints.set(TOPICS_CHECKPOINT, { id: TOPICS_CHECKPOINT, kind: "approve_topics", status: "pending", requested_at: new Date().toISOString() })
 						sendEvent(SemanticEvent.create(EV.CheckpointRequested, participant.getId(), { id: TOPICS_CHECKPOINT, kind: "approve_topics" }), participant.getId())
 						if (opts.autoApprove) resolveCheckpoint(TOPICS_CHECKPOINT, true)

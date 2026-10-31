@@ -20,7 +20,7 @@
         "finding_added", "finding_verified", "conflict_detected",
         "source_added", "injection_flagged",
         "budget_warning", "budget_exhausted",
-        "analysis_started", "scenario_computed", "plan_ready",
+        "replan_requested", "analysis_started", "scenario_computed", "plan_ready",
         "checkpoint_requested", "checkpoint_resolved"
       ]
     },
