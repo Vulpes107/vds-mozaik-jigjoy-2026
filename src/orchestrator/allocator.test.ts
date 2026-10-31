@@ -136,7 +136,7 @@ test("a deep topic that ends its first pass thin gets one more collector->analys
 	// Without a topic's worth of research budget left there is no second pass.
 	const poor = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" }, { usd: 1, seconds: 3600 })
 	poor.findings = new Map([["f_1", { topic_id: "t_1" }]])
-	poor.spent.usd = 0.3 // research share is 0.5: 0.2 left, below one topic's worth (0.3)
+	poor.spent.usd = 0.3 // research share is 0.5: 0.2 left, below one topic's worth (0.35)
 	allocate(poor, { type: EV.TopicApproved, payload: {} }, cfg, 0)
 	allocate(poor, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
 	for (const [slotId, role] of [["c1", "collector"], ["an1", "analyst"], ["v1", "verifier"]] as const) {

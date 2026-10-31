@@ -61,8 +61,8 @@ export function defaultLimits(role: WorkerRole, depth: "shallow" | "deep", topic
 	const deep = depth === "deep"
 	const base: Record<WorkerRole, TaskLimits> = {
 		scout: { maxToolCalls: 5, maxTokens: 30_000, seconds: 90, maxOutputTokens: 1024 },
-		// Tokens include the re-sent context of every turn (and cached tokens): 60k on Sonnet is about $0.20 per task.
-		collector: { maxToolCalls: deep ? 10 : 6, maxTokens: deep ? 60_000 : 40_000, seconds: deep ? 300 : 150, maxOutputTokens: 2048 },
+		// Tokens include the re-sent context of every turn (and cached tokens): 90k on Sonnet is about $0.30 per task.
+		collector: { maxToolCalls: deep ? 14 : 8, maxTokens: deep ? 90_000 : 60_000, seconds: deep ? 300 : 150, maxOutputTokens: 2048 },
 		analyst: { maxToolCalls: deep ? 12 : 8, maxTokens: deep ? 80_000 : 50_000, seconds: deep ? 360 : 200, maxOutputTokens: 4096 },
 		verifier: { maxToolCalls: deep ? 10 : 6, maxTokens: deep ? 60_000 : 40_000, seconds: deep ? 300 : 200, maxOutputTokens: 2048 },
 	}

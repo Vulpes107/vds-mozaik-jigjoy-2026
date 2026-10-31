@@ -46,8 +46,8 @@ test("submit_topics validates against the contract and writes the board", async 
 test("topicCap: the research share of money and time, and the collector/analyst/verifier trios, bound the agenda", () => {
 	const slot = (role: Slot["role"]): Slot => ({ role, topicId: null, assignedAt: 0, reassignments: 0 })
 	const one = [slot("scout"), slot("scout"), slot("collector"), slot("analyst"), slot("verifier")]
-	assert.equal(topicCap({ usd: 3, seconds: 900 }, one), 6) // money: 2.25 USD / 0.3 = 7; time: 660 s / 100 = 6 trio-topics
-	assert.equal(topicCap({ usd: 4, seconds: 3600 }, one), 10) // money: 3/0.3 = 10; time: 2700/100 = 27
+	assert.equal(topicCap({ usd: 3, seconds: 900 }, one), 6) // money: 2.25 USD / 0.35 = 6; time: 660 s / 100 = 6 trio-topics
+	assert.equal(topicCap({ usd: 4, seconds: 3600 }, one), 8) // money: 3/0.35 = 8; time: 2700/100 = 27
 	assert.equal(topicCap({ usd: 1, seconds: 300 }, one), 3) // floor of 3
 	assert.equal(topicCap({ usd: 100, seconds: 36_000 }, one), MAX_TOPICS)
 	assert.equal(topicCap({}, one), MAX_TOPICS)
@@ -63,7 +63,7 @@ test("submit_topics enforces the run's own bounds", async () => {
 test("replanCap: leftover research budget in whole topics, no floor", () => {
 	const slot = (role: Slot["role"]): Slot => ({ role, topicId: null, assignedAt: 0, reassignments: 0 })
 	const one = [slot("collector"), slot("analyst"), slot("verifier")]
-	assert.equal(replanCap({ usd: 1 }, one), 3)
+	assert.equal(replanCap({ usd: 1 }, one), 2) // 1 / 0.35
 	assert.equal(replanCap({ usd: 0.2 }, one), 0)
 	assert.equal(replanCap({ usd: 1, seconds: 160 }, one), 1)
 })

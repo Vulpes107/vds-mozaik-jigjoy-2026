@@ -87,7 +87,8 @@ export const defaultConfig: AllocatorConfig = {
 	analysisReserve: { fraction: 0.25, usd: 0.75, seconds: 240, tokens: 300_000 }, // the 2026-10-31 live run: analysis took 0.57 USD and 150 s after research stopped
 	// Live runs on 2026-10-31 (Haiku workers) measured ~0.3 USD / ~1 min per topic with staged roles. Set at that measurement
 	// (was 0.45 / 150, which left a third of a 5 USD run unspent); overruns end as research_incomplete, so erring low is safe.
-	topicCost: { usd: 0.3, seconds: 100 },
+	// +0.05 USD for the collector's larger per-task cap (60k -> 90k tokens deep, src/research/index.ts); its time cap is unchanged.
+	topicCost: { usd: 0.35, seconds: 100 },
 	maxReplanRounds: 3,
 }
 
