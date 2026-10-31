@@ -21,11 +21,13 @@ const LINE_PATTERNS: [string, RegExp][] = [
 	["chat_template", /<\|?\/?(im_start|im_end|system|assistant|developer|tool_call|function_call|instructions?)\b[^>]*\|?>|\[\/?(inst|sys)\]|<<\/?sys>>/i],
 	["tool_command", /\b(call|invoke|use|run|execute|trigger)\b[^.\n]{0,20}\b(the\s+)?[`"']?(submit_finding|submit_source|report_scores|record_verification|web_fetch|web_search|save_material|suggest_topic|report_gap)[`"']?/i],
 	["ai_addressed", /\b(attention|note to|message (for|to)|dear|instructions? for|hey)\s+(all\s+)?(ai|llm|language models?|assistants?|agents?|chatbots?|crawlers?|scrapers?)\b/i],
-	["ai_must", /\b(ai|llm|assistant|agent|model|chatbot)s?\b[^.\n]{0,15}\b(must|should|shall|need to|has to|are required to)\b[^.\n]{0,40}\b(ignore|recommend|always|never|reveal|include|output|respond|report|rate|mark|say)\b/i],
+	// Addressed to the reader ("any AI reading this must..."), not to AI in general: "AI systems must report incidents" (EU AI Act) and
+	// "role models should never..." (parenting advice) flagged EUR-Lex, the FTC and paediatric sites as hostile.
+	["ai_must", /\bif you are\s+an?\s+(ai|llm|language model|assistant|agent|chatbot|model)\b|\b(ai|llm|language model|assistant|agent|chatbot|model)s?\s+(reading|processing|parsing|analy[sz]ing|summari[sz]ing|crawling|indexing|visiting)\s+(this|these|the following)\b/i],
 	["exfiltration", /\b(send|post|email|upload|forward|exfiltrate|leak|transmit)\b[^.\n]{0,60}\b(api[_ -]?keys?|passwords?|credentials?|secrets?|tokens?|system prompt|conversation|chat history|environment variables?|\.env)\b/i],
 	["manipulate_ratings", /\b(rate|score|mark|classify|treat|report)\b[^.\n]{0,25}\b(this|the)\s+(source|page|site|website|article|document)\b[^.\n]{0,25}\b(as\s+)?(1(\.0)?|100\s?%|highly reliable|fully reliable|verified|trusted|authoritative)\b/i],
-	["conceal", /\b(do not|don't|never)\s+(tell|inform|mention|reveal|disclose|alert)\b[^.\n]{0,25}\b(user|operator|human|anyone)\b/i],
-	["suppress_findings", /\b(do not|don't|never)\s+(report|record|submit|include|cite)\b[^.\n]{0,40}\b(other|competitors?|alternatives?|negative|findings?|sources?)\b/i],
+	["conceal", /\b(do not|don't|never)\s+(tell|inform|mention|reveal|disclose|alert)\s+(the|your)\s+(user|operator|human)\b/i],
+	["suppress_findings", /\b(do not|don't|never)\s+(report|record|submit|include|cite)\b[^.\n]{0,40}\b(competitors?|alternatives?|findings?|sources?)\b/i],
 ]
 
 const HIDDEN_CHARS = /[​-‏‪-‮⁠-⁤﻿]/g
@@ -35,8 +37,7 @@ export function scanForInjection(text: string): InjectionScan {
 	const patterns = new Set<string>()
 
 	let work = text
-	const hidden = work.match(HIDDEN_CHARS)
-	if (hidden && hidden.length >= 5) patterns.add("hidden_unicode")
+	const hidden = (text.match(HIDDEN_CHARS)?.length ?? 0) >= 5
 	work = work.replace(HIDDEN_CHARS, "")
 
 	// HTML comments are invisible to a human reader but visible to a model: drop them, flag if they carry directives.
@@ -54,6 +55,8 @@ export function scanForInjection(text: string): InjectionScan {
 		}
 		return line
 	})
+	// Zero-width characters are an evasion trick only when they hide a directive; PDFs and word processors litter clean text with them.
+	if (hidden && patterns.size > 0) patterns.add("hidden_unicode")
 	return { flagged: patterns.size > 0, patterns: [...patterns], cleaned: cleanedLines.join("\n") }
 }
 
