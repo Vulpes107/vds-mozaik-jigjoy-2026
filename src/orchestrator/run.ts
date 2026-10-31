@@ -66,6 +66,11 @@ export function overrideAssumption(assumptionId: string, value: number | null): 
 	sendEvent(SemanticEvent.create(EV.AssumptionOverridden, producerId, { assumptionId, value }), producerId)
 }
 
+/** Dashboard "stop": the run ends now; the snapshot records it as `stopped`. */
+export function stopRun(reason: string): void {
+	sendEvent(SemanticEvent.create(EV.RunCompleted, producerId, { reason }), producerId)
+}
+
 function tavilyAsProviders() {
 	const { search, fetch, extras } = tavilyProviders()
 	return { searchProviders: [search], fetchProviders: [fetch], extras }
