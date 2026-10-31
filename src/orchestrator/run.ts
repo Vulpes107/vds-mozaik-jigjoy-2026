@@ -112,7 +112,10 @@ function joinParticipants(state: RunState, opts: RunOptions) {
 		rejectionHandlerInstalled = true
 		process.on("unhandledRejection", (e) => {
 			console.error("agent loop failed:", e)
-			sendEvent(SemanticEvent.create(EV.RunCompleted, cartographer.getId(), { reason: `agent loop failed: ${e instanceof Error ? e.message : String(e)}` }), cartographer.getId())
+			// Before topics exist only the Planner runs, so its failure ends the run. Afterwards it is one worker's loop
+			// (typically a retired agent's late transition: "Participant … not found" after a reassignment); the slot's
+			// own task timeout reassigns it, so the run goes on.
+			if (state.topics.size === 0) sendEvent(SemanticEvent.create(EV.RunCompleted, cartographer.getId(), { reason: `agent loop failed: ${e instanceof Error ? e.message : String(e)}` }), cartographer.getId())
 		})
 	}
 	if (opts.planner !== false) startPlanner()
