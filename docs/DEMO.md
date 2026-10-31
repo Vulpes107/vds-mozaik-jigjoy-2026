@@ -2,6 +2,8 @@
 
 ## 90-second scripted demo (no API keys needed)
 
+**Hands-free:** `MOCK_DEMO=1 node dashboard/mock-server/server.mjs`, then open `http://localhost:5173/?auto=1`. The page fills the form, starts, approves, scrolls to each section and drags the price slider on the timings below; you only talk. Reload `/?auto=1` to replay.
+
 ```bash
 MOCK_DEMO=1 node dashboard/mock-server/server.mjs      # scripted run; DEMO_SPEED=2 makes it twice as fast
 cd dashboard && npm run dev                            # http://localhost:5173
