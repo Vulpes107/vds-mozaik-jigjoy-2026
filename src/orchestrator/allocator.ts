@@ -102,6 +102,8 @@ export interface Incoming {
 }
 
 const LIVE: TopicState[] = ["queued", "scouting", "deep", "shallow"]
+/** Deep work is sequential: the analyst needs the collector's material, the verifier needs findings to check. */
+const PRECEDES: Partial<Record<WorkerRole, WorkerRole>> = { analyst: "collector", verifier: "analyst" }
 const ROLES_NEEDED: Record<string, WorkerRole[]> = {
 	queued: ["scout"],
 	scouting: ["scout"],
@@ -207,6 +209,13 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				retry(t, `${p.role} ${p.outcome}`)
 				break
 			}
+			// Produced nothing, the topic has no findings, and nobody else is working on it: there is nothing to pass on.
+			const hasFindings = [...(board.findings?.values() ?? [])].some((f) => f.topic_id === t.id)
+			const others = [...board.slots.values()].some((o) => o.topicId === t.id)
+			if (p.role !== "scout" && p.findings === 0 && p.sources === 0 && !hasFindings && !others) {
+				setState(t, "research_incomplete", t.state_reason?.startsWith("gap: ") ? t.state_reason.slice(5) : `${p.role} finished without producing output`)
+				break
+			}
 			const done = sc.rolesDone.get(t.id) ?? new Set<WorkerRole>()
 			done.add(p.role)
 			sc.rolesDone.set(t.id, done)
@@ -250,14 +259,9 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			const p = event.payload as ResearchGapPayload
 			const t = topic(p.topicId)
 			if (!t || !LIVE.includes(t.state)) break
-			const hasFindings = [...(board.findings?.values() ?? [])].some((f) => f.topic_id === t.id)
-			if (hasFindings) {
-				// Partial evidence beats none: record the gap, keep the findings and the workers.
-				t.state_reason = `gap: ${p.reason}`
-			} else {
-				setState(t, "research_incomplete", p.reason)
-				freeAllOn(t.id)
-			}
+			// A gap is a reason, not a verdict: the task reporting it is still running (one failed tool call need not end a topic).
+			// The topic ends only when a task finishes with nothing and nobody else is on it (see task.finished).
+			t.state_reason = `gap: ${p.reason}`
 			break
 		}
 		case EV.ReassignmentRequested: {
@@ -326,6 +330,7 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 				.filter((t) => LIVE.includes(t.state))
 				.filter((t) => (ROLES_NEEDED[t.state] ?? []).includes(s.role))
 				.filter((t) => !sc.rolesDone.get(t.id)?.has(s.role))
+				.filter((t) => t.state !== "deep" || !PRECEDES[s.role] || sc.rolesDone.get(t.id)?.has(PRECEDES[s.role]!))
 				.filter((t) => ![...board.slots.values()].some((o) => o.topicId === t.id && o.role === s.role))
 				.map((t) => ({ t, p: priority(t, assignedTo(t.id)) }))
 				.sort((a, b) => b.p - a.p)

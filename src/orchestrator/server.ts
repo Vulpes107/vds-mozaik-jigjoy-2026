@@ -13,9 +13,17 @@ import { overrideAssumption, startRun, stopRun, type RunOptions } from "./run.ts
 import { readSnapshot, restore, runStatus } from "./snapshot.ts"
 import { openStore } from "./store.ts"
 
-// Node's --env-file never overrides a variable the shell already exports, even an empty one (some terminals export
-// ANTHROPIC_API_KEY=""); a blank key makes every model call fail and the run stops at once. Let .env fill such blanks.
-if (existsSync(".env")) for (const [k, v] of Object.entries(parseEnv(readFileSync(".env", "utf8")))) if (!process.env[k]) process.env[k] = v
+// Node's --env-file never overrides a variable the shell already exports: an empty ANTHROPIC_API_KEY made every model
+// call fail, and a stale TAVILY_API_KEY sent a whole run to an exhausted account. Secrets live in .env (CLAUDE.md), so
+// .env wins; the overridden names are logged once so a surprise is visible.
+if (existsSync(".env") && !process.env.SWARM_WORKER) {
+	const overridden: string[] = []
+	for (const [k, v] of Object.entries(parseEnv(readFileSync(".env", "utf8")))) {
+		if (process.env[k] !== undefined && process.env[k] !== v) overridden.push(k)
+		process.env[k] = v
+	}
+	if (overridden.length) console.log(`.env overrides the shell for: ${overridden.join(", ")}`)
+}
 
 let state: RunState | undefined
 const archive = new Map<string, RunState>()
