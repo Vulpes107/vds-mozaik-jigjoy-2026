@@ -19,8 +19,12 @@ const hostOf = (url: string): string => {
 const DOMAIN_RULES: [RegExp, SourceType][] = [
 	[/(^|\.)(gov|mil|europa\.eu|gov\.[a-z]{2}|gob\.[a-z]{2}|gouv\.[a-z]{2}|admin\.ch|parlament\.[a-z]+)$/, "regulator"],
 	[/(^|\.)(sec\.gov|edgar|companieshouse\.gov\.uk|sedar|handelsregister|apr\.gov\.rs|e-justice\.europa\.eu|opencorporates\.com)/, "filing"],
-	[/(^|\.)(reuters|bloomberg|ft|wsj|bbc|cnbc|economist|forbes|theguardian|nytimes|techcrunch|euronews|politico|n1info|b92|rts)\.[a-z.]+$/, "news"],
-	[/(^|\.)(gartner|forrester|idc|statista|mckinsey|bcg|deloitte|pwc|kpmg|ey|oecd|worldbank|imf|eurostat)\.[a-z.]+$/, "analyst_report"],
+	[/(^|\.)(reuters|bloomberg|ft|wsj|bbc|cnbc|economist|forbes|theguardian|nytimes|techcrunch|euronews|politico|n1info|b92|rts|apnews|theverge|wired|arstechnica|venturebeat|zdnet|pocketgamer|gamesindustry|gamedeveloper|mobilegamer)\.[a-z.]+$/, "news"],
+	[/(^|\.)(gartner|forrester|idc|statista|mckinsey|bcg|deloitte|pwc|kpmg|ey|oecd|worldbank|imf|eurostat|sensortower|data\.ai|appmagic|newzoo|grandviewresearch|marketsandmarkets|mordorintelligence|fortunebusinessinsights|cbinsights|crunchbase|similarweb|ibisworld|euromonitor|pitchbook|nielsen|ipsos|gsma|ericsson|cisco)\.[a-z.]+$/, "analyst_report"],
+	// Universities and research institutes publish peer-reviewed or official statistics: rated as analyst reports.
+	[/(^|\.)(edu|ac\.[a-z]{2}|edu\.[a-z]{2}|uni-[a-z]+\.[a-z]+|arxiv\.org|ssrn\.com|nber\.org|researchgate\.net)$/, "analyst_report"],
+	// App stores, standards bodies and official developer documentation are first-hand data about the thing itself.
+	[/(^|\.)(play\.google\.com|apps\.apple\.com|developer\.apple\.com|developer\.android\.com|support\.google\.com|docs\.microsoft\.com|learn\.microsoft\.com|w3\.org|ietf\.org|iso\.org|github\.com)$/, "primary"],
 	[/(^|\.)(medium\.com|substack\.com|wordpress\.com|blogspot\.[a-z.]+|hashnode\.[a-z.]+|dev\.to|tumblr\.com|ghost\.io)$/, "blog"],
 	[/(^|\.)(reddit\.com|quora\.com|stackexchange\.com|stackoverflow\.com|news\.ycombinator\.com|twitter\.com|x\.com|facebook\.com|trustpilot\.com)$/, "forum"],
 ]

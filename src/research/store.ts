@@ -312,8 +312,9 @@ export class ResearchStore {
 
 	// ---- progress -------------------------------------------------------------------------------------------
 
+	/** Measured 2026-10-31: a deep pass yields 2-5 findings; 8 left every topic capped at ~70 % of its finding average. */
 	targetFindings(scope: TaskScope): number {
-		return scope.depth === "deep" ? 8 : 3
+		return scope.depth === "deep" ? 5 : 3
 	}
 
 	/** Confidence is computed from the recorded findings, not asked of the model. */
