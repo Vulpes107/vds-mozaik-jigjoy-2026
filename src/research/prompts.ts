@@ -34,7 +34,7 @@ const ROLES: Record<WorkerRole, string> = {
 - Call save_material right after each page worth analysing (do not batch), with a one-line note. Stop after 4 saved pages or 6 fetches, whichever comes first: your context is the budget. Prefer primary and independent sources; skip duplicates and thin content.
 - Call submit_source for EVERY page you save, with source_type (primary: the company's, vendor's or store's own page or data; regulator; filing; analyst_report; news; vendor; blog; forum), publisher, published_at, and original_source_url when the page just repeats another report. An untyped source scores as "other" (0.5) and caps every finding built on it at 0.6.
 - Look for a second, independent page for each key number (a different publisher, not one citing the same report): a finding backed by one source is capped by that source and cut by 10 %.
-- A blocked or paywalled page is a gap, not content: note it with report_gap and move on. Never fill a gap from memory.`,
+- A blocked, failed or paywalled page is not the end of the topic: look for the same information elsewhere first (an app store that will not load: AppBrain, AppMagic, Sensor Tower, press coverage, reviews; a paywalled report: its press release, a summary by a second publisher). Only when the alternatives fail too, note the gap with report_gap and move on. Never fill a gap from memory.`,
 
 	analyst: `ROLE: Analyst. You turn collected material into structured, sourced findings.
 - Start with list_material, then work one page at a time: read_material, submit the findings it supports, then the next page. Submit each finding as soon as you have it; never read everything first.

@@ -123,6 +123,7 @@ export function registerAnalysis(session: AnalysisSession, opts: AnalysisOptions
 						if (running) return
 						running = true
 						delete state.plan // a fresh run must not be mistaken for a finished one by the fallback check
+						session.seedProfile() // the company's own figures are assumptions before the model invents placeholders
 						start(STAGES[0] as Stage)
 					},
 				},

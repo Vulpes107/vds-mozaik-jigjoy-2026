@@ -101,14 +101,14 @@ export function researchBudget(b: Budget, cfg: AllocatorConfig = defaultConfig):
 	return Object.fromEntries((Object.entries(b) as [keyof Budget, number | undefined][]).filter(([, v]) => v !== undefined).map(([k, v]) => [k, researchLimit(k, v!, cfg)]))
 }
 
-/** Research budget still unspent on the lines the run limits, or undefined when it is not enough for one more topic. */
-export function replanBudget(board: Board, cfg: AllocatorConfig = defaultConfig): ReplanRequestedPayload["remaining"] | undefined {
+/** Research budget still unspent on the lines the run limits, or undefined when it is not enough for `topics` more topics' worth. */
+export function replanBudget(board: Board, cfg: AllocatorConfig = defaultConfig, topics = 1): ReplanRequestedPayload["remaining"] | undefined {
 	const r: ReplanRequestedPayload["remaining"] = {}
 	for (const k of ["usd", "seconds"] as const) {
 		const full = board.runBudget[k]
 		if (!full) continue
 		const left = researchLimit(k, full, cfg) - board.spent[k]
-		if (left < cfg.topicCost[k]) return undefined
+		if (left < cfg.topicCost[k] * topics) return undefined
 		r[k] = left
 	}
 	return Object.keys(r).length ? r : undefined
@@ -261,7 +261,10 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 			sc.rolesDone.set(t.id, done)
 			if ((ROLES_NEEDED[t.state] ?? []).every((r) => done.has(r))) {
 				// A thin first pass gets one more round of the same roles instead of closing; the reason is the handoff note.
-				const thin = t.state === "deep" && (t.confidence ?? 0) < cfg.secondPassBelow && hasFindings && !sc.secondPass.has(t.id) && replanBudget(board, cfg) !== undefined
+				// Only when the budget also covers every topic still waiting for its first pass: on 2026-10-31 second passes on two
+				// 0.31-priority topics spent what four 0.6-0.7 topics needed, and those ended unstaffed.
+				const waiting = [...board.topics.values()].filter((o) => o.id !== t.id && LIVE.includes(o.state)).length
+				const thin = t.state === "deep" && (t.confidence ?? 0) < cfg.secondPassBelow && hasFindings && !sc.secondPass.has(t.id) && replanBudget(board, cfg, waiting + 1) !== undefined
 				if (thin) {
 					sc.secondPass.add(t.id)
 					sc.rolesDone.delete(t.id)
@@ -419,9 +422,11 @@ export function allocate(board: Board, event: Incoming, cfg: AllocatorConfig = d
 		out.push({ type: EV.ReplanRequested, remaining, round: sc.replans })
 	} else if (!sc.analysisRequested && board.topics.size > 0 && (exhausted || (idle && sc.replanAskedAt === undefined))) {
 		sc.analysisRequested = true
+		// Research is over: a topic still live now did not finish, and its state must say so (the plan, the table and the counts all read it).
+		for (const t of board.topics.values()) if (LIVE.includes(t.state)) setState(t, "research_incomplete", t.assigned_agents?.length ? "research budget exhausted before this topic finished" : "research budget exhausted before this topic was staffed")
 		out.push({
 			type: EV.AnalysisRequested,
-			unresolvedTopicIds: [...board.topics.values()].filter((t) => LIVE.includes(t.state) || t.state === "research_incomplete").map((t) => t.id),
+			unresolvedTopicIds: [...board.topics.values()].filter((t) => t.state === "research_incomplete").map((t) => t.id),
 			droppedTopicIds: [...board.topics.values()].filter((t) => t.state === "dropped").map((t) => t.id),
 		})
 	}

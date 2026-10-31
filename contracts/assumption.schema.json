@@ -18,7 +18,7 @@
     "high": { "type": "number" },
     "user_override": { "type": ["number", "null"], "description": "Set from dashboard; wins over base when present." },
     "basis_finding_ids": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/id" } },
-    "origin": { "enum": ["research", "user", "default"], "default": "research" },
+    "origin": { "enum": ["research", "user", "default", "reference"], "default": "research", "description": "reference = curated, officially sourced parameter (store fee, VAT), not research." },
     "confidence": { "$ref": "common.schema.json#/$defs/score" },
     "sensitivity_rank": { "type": "integer", "minimum": 1 }
   }

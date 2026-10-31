@@ -31,7 +31,7 @@ export function Recommendation({ plan, scenarios, findings, assumptions }: { pla
 	const inv = d.investment
 	const lo = inv.low * 0.9, hi = inv.high * 1.05
 	return (
-		<Section id="recommend" title="What we recommend" lede="The actions, ranked, with the evidence behind each. On the right: how the five strategic options compare and how much money is needed.">
+		<Section id="recommend" title="What we recommend" lede="The actions, ranked, with the evidence behind each. On the right: how the modelled strategic options compare and how much money is needed.">
 			<div className="cols-7-5">
 				<div>
 					<h3 className="sub">Actions, in priority order</h3>
@@ -71,7 +71,7 @@ export function Recommendation({ plan, scenarios, findings, assumptions }: { pla
 				</div>
 				<div className="stack">
 					<div>
-						<h3 className="sub">Five options compared</h3>
+						<h3 className="sub">{scores.length === 1 ? "One option modelled" : `${scores.length} options compared`}</h3>
 						<ol className="rank">
 							{scores.map(([k, v], i) => (
 								<li key={k} className={i === 0 ? "top" : ""}>

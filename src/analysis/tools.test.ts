@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { RunState } from "../shared/runtime.ts"
 import { createAnalysisTools } from "./tools.ts"
 import { AnalysisSession } from "./session.ts"
+import type { Narrative } from "./engine/plan.ts"
 
 function setup() {
 	const state = new RunState()
@@ -111,6 +112,43 @@ test("tools: compute_tco stores a result that appears in the plan", async () => 
 	await call("assemble_plan", {})
 	const plan = state.plan as unknown as { decisions: { build_vs_buy: { capability: string }[] } }
 	assert.equal(plan.decisions.build_vs_buy[0]!.capability, "Billing")
+})
+
+test("tools: compute_tco rejects placeholder-equal totals and figures far beyond the company's scale", async () => {
+	const { call } = setup() // profile: cash 50,000, burn 5,000
+	await call("upsert_assumption", upsert({ text: "Volume", unit: "units/month", low: 800, base: 1000, high: 1200 }))
+	const tco = (over: Record<string, unknown>) => call("compute_tco", { capability: "Analytics", horizon_years: 3, volume_per_month: "as_001", build: { dev_cost: 5000 }, buy: { annual_license: 1000 }, ...over })
+	await assert.rejects(tco({ build: { dev_cost: 3000 }, buy: { annual_license: 1000 } }), /Build and buy total the same \(3000\)/)
+	await assert.rejects(tco({ build: { dev_cost: 20_000_000 } }), /more than 10x the company's own scale/)
+	const ok = (await tco({})) as { verdict: string }
+	assert.equal(ok.verdict, "buy")
+})
+
+test("tools: known_parameters feeds upsert_assumption as a fixed reference value", async () => {
+	const { call, state } = setup()
+	state.profile = { ...state.profile!, countries: ["HR", "RS"] }
+	const list = (await call("known_parameters", {})) as { parameters: { key: string; value: number }[] }
+	assert.ok(list.parameters.some((p) => p.key === "google_play_subscription_fee" && p.value === 15))
+	assert.deepEqual(list.parameters.filter((p) => p.key.startsWith("vat_")).map((p) => [p.key, p.value]).sort(), [["vat_HR", 25], ["vat_RS", 20]])
+	const r = (await call("upsert_assumption", { ...upsert({ low: 1, base: 2, high: 3 }), parameter_key: "vat_HR" })) as { id: string; origin: string; value: number }
+	assert.equal(r.origin, "reference")
+	assert.equal(r.value, 25)
+	const a = state.assumptions.get(r.id)!
+	assert.deepEqual([a.low, a.base, a.high, a.unit], [25, 25, 25, "%"])
+	assert.match(String(a.text), /taxation-customs\.ec\.europa\.eu/)
+	await assert.rejects(call("upsert_assumption", { ...upsert(), parameter_key: "nope" }), /Unknown parameter_key/)
+})
+
+test("tools: assemble_plan needs the engine's scenario id and does not keep a rejected narrative", async () => {
+	const { call, state, session } = setup()
+	await call("upsert_assumption", upsert())
+	await call("compute_scenario", scenarioArgs())
+	await assert.rejects(call("assemble_plan", { recommended_scenario_id: "sc_other", executive_summary: "no" }), /engine ranks "Do nothing" \(sc_nothing\) first, not sc_other/)
+	assert.equal(session.narrative, undefined)
+	const r = (await call("assemble_plan", { recommended_scenario_id: "sc_nothing", executive_summary: "ok" })) as { inert_assumption_ids: string[] }
+	assert.deepEqual(r.inert_assumption_ids, [])
+	assert.match(String(state.plan!.executive_summary), /^ok Engine result: continue/)
+	assert.equal((session.narrative as Narrative | undefined)?.recommended_scenario_id, undefined)
 })
 
 test("tools: findings are exposed to the model as data only (no instruction fields beyond the claim text)", async () => {

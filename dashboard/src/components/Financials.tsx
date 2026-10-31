@@ -164,7 +164,7 @@ function EditorRow({ a, onChange, onFocusFindings, readOnly }: { a: Assumption; 
 			<div className="name">
 				<b>{a.text}</b>
 				<span>
-					{a.origin === "default" ? "Default, not evidence-based" : a.origin === "user" ? "Your input" : "From research"} · confidence {pct(a.confidence ?? 0)}
+					{a.origin === "default" ? "Default, not evidence-based" : a.origin === "user" ? "Your input" : a.origin === "reference" ? "Known parameter (official source)" : "From research"} · confidence {pct(a.confidence ?? 0)}
 					{a.basis_finding_ids?.length ? <> · <button className="btn link" onClick={() => onFocusFindings(a.basis_finding_ids!)}>{a.basis_finding_ids.length} finding{a.basis_finding_ids.length > 1 ? "s" : ""}</button></> : " · no source findings"}
 				</span>
 			</div>

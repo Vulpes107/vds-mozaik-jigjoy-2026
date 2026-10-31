@@ -64,5 +64,5 @@ test("hung synthesizer: stage times out, agent is parked, fallback plan is still
 	// The parked synthesizer is still joined (removing it mid-loop would crash Mozaik's loop when it finally returns).
 	assert.ok(state.getParticipants().some((p) => p.getManifest().name === "Analysis-synthesizer"))
 	// Plan content is the deterministic fallback (no narrative): contains computed verdict text.
-	assert.match(String(state.plan!.executive_summary), /Recommended direction:/)
+	assert.match(String(state.plan!.executive_summary), /Engine result: expand/)
 })

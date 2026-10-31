@@ -27,5 +27,18 @@
     "origin": "default",
     "confidence": 0.4,
     "sensitivity_rank": 2
+  },
+  {
+    "schema_version": "1.0",
+    "id": "as_003",
+    "run_id": "r_demo1",
+    "text": "Google Play service fee on subscriptions [https://support.google.com/googleplay/android-developer/answer/112622, as of 2024-01-01]",
+    "unit": "%",
+    "low": 15,
+    "base": 15,
+    "high": 15,
+    "basis_finding_ids": [],
+    "origin": "reference",
+    "confidence": 0.95
   }
 ]

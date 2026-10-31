@@ -14,7 +14,7 @@ export interface Assumption {
 	high: number
 	user_override?: number | null
 	basis_finding_ids?: string[]
-	origin?: "research" | "user" | "default"
+	origin?: "research" | "user" | "default" | "reference"
 	confidence?: number
 	sensitivity_rank?: number
 	[extra: string]: unknown

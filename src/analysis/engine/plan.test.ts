@@ -152,6 +152,7 @@ test("plan: unresolved and dropped topics are disclosed but do not lower confide
 	)
 	validateAll(out)
 	assert.deepEqual(out.plan.unresolved_topic_ids, ["t_003", "t_004"])
+	assert.match(out.plan.executive_summary, /\b2 research topic\(s\) did not finish\./) // the count in prose is the list's length
 	assert.deepEqual(out.plan.dropped_topic_ids, ["t_002"])
 	assert.equal(out.plan.overall_confidence, clean.plan.overall_confidence)
 	assert.ok(out.plan.risks.some((r) => r.id === "rk_evidenceGap"))
@@ -163,6 +164,72 @@ test("plan: a bad option loses; 'continue' needs no capital and gets a review ro
 	assert.equal(out.plan.decisions.continue_vs_change.verdict, "continue")
 	assert.deepEqual(out.plan.decisions.investment, { currency: "EUR", low: 0, base: 0, high: 0, staged: false, rationale: "No new capital is required to continue as is." })
 	assert.equal(out.plan.roadmap.at(-1)!.month, 12)
+	// The summary states the alternative's value over doing nothing, including the favourable case, instead of hiding it.
+	assert.match(out.plan.executive_summary, /Best alternative "Expand": -470,000 EUR over doing nothing in the base case \(adverse -492,800, favourable -444,800/)
+})
+
+test("plan: when doing nothing wins, the sweep reports what would make the alternative pay off; when it loses, the sweep reports what kills it", () => {
+	// Expand with capex 60,000: at base it loses to doing nothing (6,000 - 36,000 = -30,000) but wins at price 150 (2000*150-160000 = 140,000 vs 1400*150-70000 = 140,000).
+	const out = assemblePlan(input({ specs: [baseSpec(), expandSpec({ capex: "60000" })], assumptions: [A("as_001", "Price per unit", "EUR", 80, 100, 160), ...assumptions().slice(1)] }))
+	validateAll(out)
+	assert.equal(out.plan.decisions.continue_vs_change.verdict, "continue")
+	const bp = out.breakpoints.find((b) => b.assumption_id === "as_001")!
+	assert.equal(bp.kind, "enables")
+	assert.ok(Math.abs(bp.value - 150) < 1e-3, JSON.stringify(bp))
+	assert.match(bp.statement, /"Expand" beats doing nothing with Price per unit above 150 EUR \(base 100\)/)
+	assert.match(out.plan.roadmap.at(-1)!.milestone, /revisit "Expand" if Price per unit above 150/)
+	assert.match(out.plan.recommendations[0]!.what_would_change_this!, /above 150/)
+	// No kill-type break point exists, so no "fragile plan" risk; the sweep covered every assumption (3), not just the top ones.
+	assert.ok(!out.plan.risks.some((r) => r.id === "rk_fragilePlan"))
+	const win = assemblePlan(input())
+	assert.ok(win.breakpoints.every((b) => b.kind === "kills"))
+	assert.deepEqual(win.plan.roadmap.at(-1)!.kill_criteria, win.breakpoints.map((b) => b.statement).slice(0, 3))
+	assert.match(win.plan.roadmap.at(-1)!.kill_criteria![0]!, /Price per unit below 90/)
+})
+
+test("plan: a narrative written against the engine's verdict is rejected with the engine's facts", () => {
+	assert.throws(
+		() => assemblePlan(input({ narrative: { recommended_scenario_id: "sc_nothing", executive_summary: "Keep going." } })),
+		/engine ranks "Expand" \(sc_expand\) first, not sc_nothing.*Engine result: expand/,
+	)
+	const ok = assemblePlan(input({ narrative: { recommended_scenario_id: "sc_expand", executive_summary: "Go." } }))
+	// The engine's own facts always follow the prose, incremental to doing nothing, with the money and budget stated.
+	assert.match(ok.plan.executive_summary, /^Go\. Engine result: expand, scenario "Expand" \(sc_expand\).*"Expand": 6,000 EUR over doing nothing in the base case.*Money needed: 24,000 EUR.*no investable budget was stated/)
+	const budget = assemblePlan(input({ profile: { financials: { investable_budget: 5000, cash_on_hand: 100000 } } }))
+	assert.match(budget.plan.executive_summary, /against a stated investable budget of 5,000 EUR/)
+	assert.ok(budget.plan.risks.some((r) => r.id === "rk_overBudget" && /24,000 EUR\) exceeds the stated investable budget \(5,000/.test(r.title)))
+})
+
+test("plan: judgement without findings is labelled and capped; narrative risks join the register", () => {
+	const out = assemblePlan(
+		input({
+			narrative: {
+				recommendations: [{ title: "Trust me", rationale: "Because.", confidence: 0.9, finding_ids: [] }],
+				risks: [{ title: "Churn", category: "market", likelihood: 0.6, severity: 0.7, mitigation: "Watch cohorts.", finding_ids: ["f_001"] }],
+			},
+		}),
+	)
+	validateAll(out)
+	const rec = out.plan.recommendations.find((r) => r.title === "Trust me")!
+	assert.equal(rec.confidence, 0.4)
+	assert.match(rec.rationale, /^Judgement, no finding cited: Because\./)
+	const risk = out.plan.risks.find((r) => r.id === "rk_n1")!
+	assert.equal(risk.title, "Churn")
+	assert.deepEqual(risk.finding_ids, ["f_001"])
+	assert.throws(() => assemblePlan(input({ narrative: { risks: [{ title: "x", likelihood: 0.5, severity: 0.5, mitigation: "y", finding_ids: ["f_404"] }] } })), /Risk "x" cites unknown finding ids: f_404/)
+})
+
+test("plan: assumptions that move no number are reported as inert and disclosed in the summary", () => {
+	const extra = [...assumptions(), A("as_004", "Churn", "%", 10, 20, 30), A("as_005", "Multiplied by zero", "x", 1, 2, 3)]
+	const out = assemblePlan(input({ assumptions: extra, specs: [baseSpec(), expandSpec({ opex: "as_003 + 0 * as_005" })] }))
+	assert.deepEqual(out.inert.map((a) => a.id), ["as_004", "as_005"])
+	assert.match(out.plan.executive_summary, /2 assumption\(s\) change no projection and are ignored by the numbers: Churn; Multiplied by zero\./)
+	assert.deepEqual(assemblePlan(input()).inert, [])
+	// A fixed reference value (low = base = high) that is used is not inert.
+	const fee = assemblePlan(input({ assumptions: [...assumptions(), A("as_004", "Store fee", "%", 15, 15, 15, { origin: "reference" })], specs: [baseSpec(), expandSpec({ revenue: "as_001 * as_002 * (1 - as_004 / 100)" })] }))
+	assert.deepEqual(fee.inert, [])
+	// The company's own stated figures are never reported as inert, used or not.
+	assert.deepEqual(assemblePlan(input({ assumptions: [...assumptions(), A("as_004", "Investable budget", "EUR", 1, 1, 1, { origin: "user" })] })).inert, [])
 })
 
 test("plan: risk appetite changes the weighting", () => {

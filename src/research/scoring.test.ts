@@ -9,6 +9,9 @@ import type { Obj } from "../shared/runtime.ts"
 
 test("domains classify and strong domain evidence overrides the model's guess", () => {
 	assert.equal(classifyDomain("https://www.sec.gov/cgi-bin/x"), "regulator")
+	assert.equal(classifyDomain("https://pmc.ncbi.nlm.nih.gov/articles/PMC123"), "analyst_report") // a study on a .gov archive is research, not a regulator
+	assert.equal(resolveSourceType("https://pubmed.ncbi.nlm.nih.gov/123", "regulator"), "analyst_report")
+	assert.equal(classifyDomain("https://www.appbrain.com/stats"), "analyst_report")
 	assert.equal(classifyDomain("https://ec.europa.eu/x"), "regulator")
 	assert.equal(classifyDomain("https://old.reddit.com/r/x"), "forum")
 	assert.equal(classifyDomain("https://acme.example/pricing"), undefined)
