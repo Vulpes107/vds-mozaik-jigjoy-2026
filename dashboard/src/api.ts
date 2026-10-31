@@ -4,8 +4,8 @@ import type { AgentEvent, Assumption, BusinessPlan, CompanyProfile, Finding, Sce
 /** Same origin by default: Vite proxies `/runs` to the orchestrator (see vite.config.ts). */
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 const params = new URLSearchParams(location.search)
-/** `?run=<id>` / `VITE_RUN_ID`, else the newest run listed by `GET /runs` (resolved on first load). */
-export let RUN_ID = params.get("run") ?? (import.meta.env.VITE_RUN_ID as string | undefined) ?? ""
+/** `?run=<id>` / `VITE_RUN_ID`; empty = the landing page (intake form + previous runs). */
+export const RUN_ID = params.get("run") ?? (import.meta.env.VITE_RUN_ID as string | undefined) ?? ""
 /** `?ro=1` is the read-only share view: no assumption editing, no checkpoint buttons. */
 export const READ_ONLY = params.get("ro") === "1"
 
@@ -17,6 +17,8 @@ export interface Checkpoint {
 export interface RunSummary {
 	run_id: string
 	status: string
+	/** false = served read-only from its snapshot (finished, stopped, or from an earlier server process). */
+	live?: boolean
 	profile?: CompanyProfile
 	budget?: { usd?: number; seconds?: number; tokens?: number; calls?: number }
 	spent?: { usd?: number; seconds?: number; tokens?: number; calls?: number }
@@ -57,12 +59,6 @@ export function useRun() {
 
 	const load = useCallback(async () => {
 		try {
-			if (!RUN_ID) {
-				const r = await fetch(`${API}/runs`)
-				if (!r.ok) throw new Error(`/runs: HTTP ${r.status}`)
-				RUN_ID = ((await r.json()) as { run_id: string }[])[0]?.run_id ?? ""
-				if (!RUN_ID) throw new Error("no run yet")
-			}
 			const [run, topics, findings, sources, assumptions, scenarios, plan] = await Promise.all([
 				get<RunSummary>(""),
 				get<Topic[]>("/topics"),
@@ -89,7 +85,7 @@ export function useRun() {
 		let gone = false
 		// The stream opens once the run id is known (the first load may have to look it up).
 		void load().then(() => {
-			if (gone || !RUN_ID) return
+			if (gone) return
 			es = new EventSource(`${API}/runs/${RUN_ID}/events`)
 			es.onopen = () => setData((d) => (d.conn === "offline" ? d : { ...d, conn: "live" }))
 			es.onerror = () => setData((d) => ({ ...d, conn: d.run ? "reconnecting" : "offline" }))
@@ -126,12 +122,30 @@ export function useRun() {
 	return { data, overrideAssumption, resolveCheckpoint, reload: load }
 }
 
-/** `POST /runs` with a CompanyProfile; the server validates it and answers 409 if it already hosts a run. */
-export async function startRun(profile: CompanyProfile): Promise<string> {
-	const r = await fetch(`${API}/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profile }) })
+export interface RunRow {
+	run_id: string
+	company: string | null
+	status: string
+	saved_at: string
+	spent_usd: number
+}
+export const listRuns = async (): Promise<RunRow[]> => {
+	const r = await fetch(`${API}/runs`)
+	if (!r.ok) throw new Error(`GET /runs: HTTP ${r.status}`)
+	return (await r.json()) as RunRow[]
+}
+
+/** `POST /runs` with a CompanyProfile plus run options; the server validates the profile. A 409 (a run is still in progress) carries that run's id on the error. */
+export async function startRun(body: { profile: CompanyProfile; auto_approve?: boolean; slots?: Record<string, number> }): Promise<string> {
+	const r = await fetch(`${API}/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
 	const b = (await r.json()) as { run_id?: string; error?: string }
-	if (!r.ok || !b.run_id) throw new Error(b.error ?? `POST /runs: HTTP ${r.status}`)
+	if (!r.ok || !b.run_id) throw Object.assign(new Error(b.error ?? `POST /runs: HTTP ${r.status}`), { status: r.status, run_id: b.run_id })
 	return b.run_id
+}
+/** Ends a live run; it stays readable from its snapshot. */
+export async function stopRun(id: string): Promise<void> {
+	const r = await fetch(`${API}/runs/${id}/stop`, { method: "POST" })
+	if (!r.ok) throw new Error(`stop: HTTP ${r.status}`)
 }
 
 const EVENT_TYPES: AgentEvent["type"][] = [

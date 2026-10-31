@@ -2,7 +2,7 @@
 
 Golden company: `mocks/company_profile.sample.json` (Demo Logistics d.o.o., run `r_demo1`).
 
-1. **Intake** — show the company profile (logistics SME, considering build-vs-buy on route optimisation).
+1. **Intake** — the landing page: the company profile form (logistics SME, considering build-vs-buy on route optimisation), the research limits with their recommendations, and the previous runs on the side.
 2. **Topics** — Planner's topic list on the Research map panel; approve the `cp_topics` checkpoint.
 3. **Dropped + reassigned** — watch the live feed: `t_002` ("Trade show calendar in unrelated region")
    is dropped for low relevance (0.12), and its agent `a_03` is reassigned onto `t_001`

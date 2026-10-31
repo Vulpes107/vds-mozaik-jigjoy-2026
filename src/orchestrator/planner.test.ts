@@ -2,8 +2,8 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { SituationSpecification, createHuman, type SituationContext } from "@mozaik-ai/core"
 import { EV } from "../shared/events.ts"
-import { join, startRuntime } from "../shared/runtime.ts"
-import { CATEGORIES, makeSubmitTopics } from "./planner.ts"
+import { join, startRuntime, type Slot } from "../shared/runtime.ts"
+import { CATEGORIES, MAX_TOPICS, makeSubmitTopics, topicCap } from "./planner.ts"
 
 class WhenProposed extends SituationSpecification {
 	isSatisfiedBy({ event }: SituationContext): boolean {
@@ -41,4 +41,20 @@ test("submit_topics validates against the contract and writes the board", async 
 	assert.deepEqual(state.topics.get("t_015")?.depends_on, ["t_001"])
 	await new Promise((r) => setTimeout(r, 10))
 	assert.equal(proposed.length, 1)
+})
+
+test("topicCap: the research share of money and time, and the collector/analyst/verifier trios, bound the agenda", () => {
+	const slot = (role: Slot["role"]): Slot => ({ role, topicId: null, assignedAt: 0, reassignments: 0 })
+	const one = [slot("scout"), slot("scout"), slot("collector"), slot("analyst"), slot("verifier")]
+	assert.equal(topicCap({ usd: 3, seconds: 900 }, one), 3) // 2.25 USD / 0.6 = 3; 660 s / 360 = 1 trio-topic -> floor of 3
+	assert.equal(topicCap({ usd: 10, seconds: 3600 }, [...one, slot("collector"), slot("analyst"), slot("verifier")]), 12) // money: 7.5/0.6 = 12; time: 7 x 2 trios = 14
+	assert.equal(topicCap({ usd: 100, seconds: 36_000 }, one), MAX_TOPICS)
+	assert.equal(topicCap({}, one), MAX_TOPICS)
+})
+
+test("submit_topics enforces the run's own bounds", async () => {
+	const tool = makeSubmitTopics(() => "p", { min: 3, max: 3 })
+	const res = await tool.invoke({ topics: good.slice(0, 5), skipped_categories: CATEGORIES.slice(5).map((c) => ({ category: c, reason: "n/a" })) })
+	assert.equal(res.status, "invalid")
+	assert.ok(res.errors.some((e: string) => e.includes("at most 3")))
 })

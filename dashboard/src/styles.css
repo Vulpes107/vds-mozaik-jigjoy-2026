@@ -220,3 +220,32 @@ td.num { font-size: 13px; }
   body { background: #fff; color: #000; }
   .vlist { height: auto; overflow: visible; }
 }
+
+/* intake form */
+.empty:has(.form) { max-width: 880px; }
+.form { margin-top: 32px; display: grid; gap: 20px; }
+.form fieldset { border: 1px solid var(--rule); padding: 14px 16px 16px; display: grid; gap: 12px; }
+.form legend { font: 600 12px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
+.form .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; font-size: 13px; }
+.field > span { color: var(--ink-2); }
+.form input:not([type="checkbox"]), .form select, .form textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 2px; width: 100%; }
+.form .hint { font-size: 12px; color: var(--muted); }
+.form .check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.form .product { display: grid; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
+.form .banner ul { margin: 6px 0 0; padding-left: 18px; }
+.form .banner pre { white-space: pre-wrap; font: 12px/1.5 var(--mono); margin-top: 6px; }
+
+/* landing: intake + previous runs */
+.landing { max-width: 1240px; margin: 48px auto; padding: 0 var(--gutter); display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 40px; align-items: start; }
+.landing h1 { font: 400 34px/1.2 var(--serif); margin: 6px 0 12px; }
+.landing aside { position: sticky; top: 24px; }
+.landing aside h2 { font: 600 12px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+.runs { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.runs li { border-bottom: 1px solid var(--rule-soft); }
+.runs a { display: grid; gap: 4px; padding: 10px 6px; color: inherit; text-decoration: none; }
+.runs a:hover, .runs a:focus-visible { background: var(--accent-soft); }
+.runs b { font: 500 14px var(--sans); }
+.runs .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+@media (max-width: 900px) { .landing { grid-template-columns: 1fr; } .landing aside { position: static; } }
+.banner .reason { white-space: pre-wrap; font: 12px/1.5 var(--mono); margin-top: 8px; }

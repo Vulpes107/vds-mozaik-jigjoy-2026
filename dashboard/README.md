@@ -15,8 +15,9 @@ Against the real orchestrator (from the repo root, in the devcontainer):
 node --env-file=.env --import tsx src/orchestrator/server.ts   # A's API on :8787
 cd dashboard && npm run dev                                     # proxies /runs to :8787
 ```
-With no `?run=`, the page shows the newest run from `GET /runs`; if the server hosts none, the empty state has an intake form
-(a `CompanyProfile`, prefilled from `mocks/company_profile.sample.json`) whose **Start run** posts it to `POST /runs` and reloads on the new id.
+With no `?run=`, the page is the landing page: the intake form (profile, research limits; worker slots are sized from the limits; validated, with recommendations,
+draft kept in `localStorage`) and the list of previous runs from `GET /runs`. **Start run** posts to `POST /runs` and opens `?run=<id>`.
+A run page has **New run** (back to the landing page) and **Stop run**; a run that is not live on the server opens read-only from its snapshot.
 The dev server proxies `/runs` so the browser never makes a cross-origin call (`API_URL` picks another backend for the proxy).
 `VITE_API_URL` and `VITE_RUN_ID` override the API base and run id in the built page.
 
