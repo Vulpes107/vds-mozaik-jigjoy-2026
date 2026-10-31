@@ -1,5 +1,5 @@
 import type { Assumption, BusinessPlan, Finding, Scenario, Source, Topic } from "../types/contracts.ts"
-import { LOW_CONFIDENCE } from "../derive.ts"
+import { LOW_CONFIDENCE, goNoGo } from "../derive.ts"
 import { compact, confWord, dateOnly, pct } from "../fmt.ts"
 import { Banner, Kpi } from "../ui.tsx"
 
@@ -36,6 +36,7 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings, source
 	const m = chosen?.metrics
 	const inv = plan.decisions.investment
 	const gaps = plan.unresolved_topic_ids?.length ?? 0
+	const go = goNoGo(plan, scenarios)
 	return (
 		<>
 		<div className="verdict">
@@ -51,6 +52,17 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings, source
 				<div className="kicker">Verdict · as of {dateOnly(plan.generated_at)}</div>
 				<p className="word serif">{plan.decisions.continue_vs_change.verdict}</p>
 				<p className="summary">{plan.executive_summary}</p>
+				{go && (
+					<div className={`callout gonogo ${go.call}`}>
+						<b>{go.headline}</b> {go.reason}
+						<ul className="facts" style={{ marginTop: 10, marginBottom: 0 }}>
+							<li><b>{compact(go.upfront)} {go.cur}</b>up-front (range {compact(inv.low)} to {compact(inv.high)})</li>
+							<li><b>{compact(go.extraOpex)} {go.cur}</b>extra running cost over {go.years} years vs doing nothing</li>
+							<li className={go.gain !== null && go.gain <= 0 ? "bad" : ""}><b>{go.gain === null ? "n/a" : `${compact(go.gain)} ${go.cur}`}</b>value over doing nothing (NPV)</li>
+							<li><b>{compact(go.upfront + go.extraOpex)} {go.cur}</b>total cost estimate, base case</li>
+						</ul>
+					</div>
+				)}
 			</div>
 			<div className="conf">
 				<div className="kicker">Overall confidence</div>

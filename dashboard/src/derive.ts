@@ -186,3 +186,41 @@ export function sourceStats(sources: { reliability: number; injection_flagged?: 
 	const n = sources.length
 	return { n, flagged: sources.filter((s) => s.injection_flagged).length, avg: n ? sources.reduce((a, s) => a + s.reliability, 0) / n : 0, weak: sources.filter((s) => s.reliability < 0.5).length }
 }
+
+// ---------- is the project worth doing at all? ----------
+export interface GoNoGo {
+	call: "go" | "conditional" | "no"
+	headline: string
+	reason: string
+	cur: string
+	years: number
+	upfront: number
+	/** Running cost over the horizon above the do-nothing baseline (0 when no baseline exists). */
+	extraOpex: number
+	/** NPV of the chosen option minus NPV of doing nothing. */
+	gain: number | null
+}
+/**
+ * Plain answer to "should we do anything, or drop it?", computed from the chosen scenario against the do-nothing
+ * baseline. The LLM's verdict word is only used to detect an explicit exit; the money comparison is ours.
+ */
+export function goNoGo(plan: BusinessPlan, scenarios: Scenario[]): GoNoGo | null {
+	const chosen = scenarios.find((s) => s.id === plan.chosen_scenario_id && (s.case ?? "base") === "base")
+	if (!chosen) return null
+	const base = scenarios.find((s) => s.kind === "do_nothing" && (s.case ?? "base") === "base")
+	const inv = plan.decisions.investment
+	const years = Math.max(chosen.revenue_by_year.length, chosen.opex_by_year.length)
+	const extraOpex = chosen.opex_by_year.reduce((a, o, y) => a + o - (base?.opex_by_year[y] ?? 0), 0)
+	const npv = chosen.metrics?.npv
+	const gain = npv === undefined ? null : npv - (base?.metrics?.npv ?? 0)
+	const out = { cur: inv.currency, years, upfront: inv.base, extraOpex: Math.max(0, extraOpex), gain }
+	const k = (n: number) => `${n < 0 ? "−" : ""}${Math.round(Math.abs(n) / 1e3)}k ${inv.currency}`
+	if (plan.decisions.continue_vs_change.verdict === "exit" || chosen.kind === "exit")
+		return { ...out, call: "no", headline: "Drop it.", reason: "The analysis itself concludes the best option is to exit." }
+	if (chosen.kind === "do_nothing" || (gain !== null && gain <= 0))
+		return { ...out, call: "no", headline: "Do nothing.", reason: gain === null ? "No valued option beats the baseline." : `Doing nothing is worth ${k(-gain)} more than the best alternative, so spending is not justified.` }
+	if (gain === null) return { ...out, call: "conditional", headline: "Not decidable yet.", reason: "The chosen option has not been valued, so it cannot be compared with doing nothing." }
+	if (chosen.metrics?.runway_breached)
+		return { ...out, call: "conditional", headline: "Worth doing, but only in steps.", reason: `It creates ${k(gain)} more value than doing nothing, yet the base case runs out of cash first. Fund it in stages with kill criteria, or do not start.` }
+	return { ...out, call: "go", headline: "Worth doing.", reason: `It creates ${k(gain)} more value than doing nothing and stays cash-positive in the base case.` }
+}
