@@ -91,6 +91,9 @@ export function check(i: Intake): Report {
 	})
 
 	for (const [k, v] of Object.entries(f)) if (v !== undefined && !Number.isFinite(v)) errors.push(`Financials: ${k.replaceAll("_", " ")} must be a number.`)
+	// The plan is built on these; without them the engine uses labelled zero placeholders and says so on every page.
+	const missing = (["annual_revenue", "monthly_burn", "cash_on_hand", "investable_budget"] as const).filter((k) => f[k] === undefined)
+	if (missing.length) warnings.push(`Not given: ${missing.map((k) => k.replaceAll("_", " ")).join(", ")}. The plan will use placeholders for them and the cash and budget figures will be illustrative.`)
 	if (f.investable_budget !== undefined && f.cash_on_hand !== undefined && f.investable_budget > f.cash_on_hand) warnings.push("Investable budget exceeds cash on hand.")
 	const runway = recommend(p).runway_months
 	if (runway !== null && runway < 6) warnings.push(`Runway is about ${runway} months at the stated burn; consider a low risk appetite.`)

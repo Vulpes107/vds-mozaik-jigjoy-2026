@@ -72,6 +72,7 @@ export function Verdict({ plan, scenarios, topics, assumptions, findings, source
 				<p className="note">
 					{confWord(conf)} confidence.{" "}
 					{reasons.length ? `Held down by: ${reasons.join("; ")}.` : "No open evidence gaps recorded."}
+					{" "}This rates the evidence behind the numbers, weighted by how much each assumption moves the result. The confidence shown on each action below is the writer's own judgement of that action and can sit above or below it.
 				</p>
 			</div>
 		</div>

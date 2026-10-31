@@ -65,3 +65,9 @@ test("clean drops blanks the schema would reject and keeps the schema version", 
 	assert.deepEqual(c.countries, ["RS", "HR"])
 	assert.equal(c.products.length, 1)
 })
+
+test("missing company financials warn (placeholders in the plan) but do not block the start", () => {
+	const r = check({ profile: { schema_version: "1.0", name: "X", description: "a".repeat(50), products: [{ name: "P", description: "d" }], financials: { cash_on_hand: 3000 } }, auto_approve: true })
+	assert.equal(r.errors.length, 0)
+	assert.ok(r.warnings.some((w) => w.startsWith("Not given: annual revenue, monthly burn, investable budget.")), r.warnings.join(" | "))
+})
