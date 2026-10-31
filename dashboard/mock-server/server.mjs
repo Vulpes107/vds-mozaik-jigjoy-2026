@@ -114,6 +114,7 @@ function handle(req, res) {
 		if (req.method === "GET" && rest.length === 0) {
 			return json(res, 200, {
 				run_id: RUN_ID,
+				live: true,
 				project_id: profile.project_id,
 				status: runStatus(),
 				profile,
@@ -127,6 +128,7 @@ function handle(req, res) {
 		if (req.method === "GET" && rest[0] === "findings") return json(res, 200, [...findings.values()])
 		if (req.method === "GET" && rest[0] === "sources") return json(res, 200, [...sources.values()])
 		if (req.method === "GET" && rest[0] === "assumptions") return json(res, 200, [...assumptions.values()])
+		if (req.method === "POST" && rest[0] === "stop") return json(res, 202, { run_id: RUN_ID, status: "stopped" })
 		if (req.method === "POST" && rest[0] === "assumptions" && rest[1]) {
 			const a = assumptions.get(rest[1])
 			if (!a) return json(res, 404, { error: "unknown assumption" })

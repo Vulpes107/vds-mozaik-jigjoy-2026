@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { Conn, RunSummary } from "../api.ts"
-import { READ_ONLY } from "../api.ts"
+import { READ_ONLY, RUN_ID, stopRun } from "../api.ts"
 import { compact, label } from "../fmt.ts"
 import { Chip } from "../ui.tsx"
 
@@ -20,6 +20,13 @@ function Meter({ name, used, cap, unit }: { name: string; used?: number; cap?: n
 }
 
 export function Header({ run, conn }: { run?: RunSummary; conn: Conn }) {
+	const [stopping, setStopping] = useState(false)
+	const stop = async () => {
+		if (!confirm("Stop this run? Research ends now; what was found stays readable.")) return
+		setStopping(true)
+		await stopRun(RUN_ID).catch((e: Error) => alert(e.message))
+		location.reload()
+	}
 	const [theme, setTheme] = useState<string>(() => document.documentElement.dataset.theme ?? "")
 	useEffect(() => {
 		if (!theme) return
@@ -37,9 +44,11 @@ export function Header({ run, conn }: { run?: RunSummary; conn: Conn }) {
 				<h1 className="company">{run?.profile?.name ?? "Loading run"}</h1>
 			</div>
 			<div className="hdr-tools">
-				{run && <Chip kind={run.status === "done" ? "closed" : run.status === "failed" ? "flag" : "deep"}>{label(run.status)}</Chip>}
+				{run && <Chip kind={run.status === "done" ? "closed" : run.status === "failed" || run.status === "stopped" ? "flag" : "deep"}>{label(run.status)}</Chip>}
 				{conn === "reconnecting" && <Chip kind="stale">Reconnecting</Chip>}
-				{READ_ONLY && <Chip kind="queued">Read-only</Chip>}
+				{READ_ONLY ? <Chip kind="queued">Read-only</Chip> : run?.live === false && <Chip kind="queued">Archived</Chip>}
+				{!READ_ONLY && run?.live && run.status !== "done" && run.status !== "stopped" && <button className="btn" disabled={stopping} onClick={() => void stop()}>{stopping ? "Stopping…" : "Stop run"}</button>}
+				<a className="btn" href={location.pathname}>New run</a>
 				<button className="btn" onClick={() => setTheme(dark ? "light" : "dark")} aria-pressed={dark}>{dark ? "Light" : "Dark"}</button>
 				<a className="btn" href="#export">Export</a>
 			</div>
@@ -49,7 +58,7 @@ export function Header({ run, conn }: { run?: RunSummary; conn: Conn }) {
 					<Meter name="Time" used={s?.seconds} cap={b.seconds} unit="min" />
 					<Meter name="Tokens" used={s?.tokens} cap={b.tokens} unit="n" />
 					<Meter name="Calls" used={s?.calls} cap={b.calls} unit="n" />
-					{remaining !== undefined && run?.status !== "done" && (
+					{remaining !== undefined && run?.live && run.status !== "done" && (
 						<div className="meter"><span>Time left (at most)</span><b>{Math.round(remaining / 60)} min</b></div>
 					)}
 				</div>
