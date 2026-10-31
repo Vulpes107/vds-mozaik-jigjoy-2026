@@ -16,8 +16,10 @@ import { ResearchStore } from "./store.ts"
 import { type CacheStore, FileCache, LayeredCache } from "./tools/cache.ts"
 import { ResearchGateway, type GatewayLimits } from "./tools/gateway.ts"
 import type { FetchProvider, ResearchExtras, SearchProvider } from "./tools/provider.ts"
+import { parallelProviders } from "./tools/parallel.ts"
 import { LiveRedactor } from "./tools/redact.ts"
 import { RateLimiter, type RetryPolicy, defaultRetry } from "./tools/resilience.ts"
+import { tavilyProviders } from "./tools/tavily.ts"
 import { CallBudget, UsageMeter } from "./tools/usage.ts"
 import { type Clock, systemClock } from "./types.ts"
 
@@ -137,3 +139,15 @@ export function startResearch(opts: ResearchOptions): ResearchSystem {
 
 export * from "./tools/provider.ts"
 export { tavilyProviders, createTavilyClient } from "./tools/tavily.ts"
+export { parallelProviders, ParallelMcpClient, ParallelSearchProvider, ParallelFetchProvider } from "./tools/parallel.ts"
+
+/**
+ * Tavily first, Parallel's accountless Search MCP as the fallback when Tavily is rate-limited/down (gateway.ts's
+ * `callProviders` already tries providers in array order and only records a gap once every provider has failed).
+ * Parallel has no `map`/`crawl`/`research` extras, so those stay on Tavily alone.
+ */
+export function tavilyWithParallelFallback(opts: { parallelApiKey?: string } = {}) {
+	const tav = tavilyProviders()
+	const par = parallelProviders({ apiKey: opts.parallelApiKey })
+	return { searchProviders: [tav.search, par.search], fetchProviders: [tav.fetch, par.fetch], extras: tav.extras }
+}
