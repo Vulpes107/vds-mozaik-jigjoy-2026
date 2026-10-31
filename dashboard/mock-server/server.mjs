@@ -26,13 +26,27 @@ function asArray(x) {
 	return Array.isArray(x) ? x : x ? [x] : []
 }
 
+// MOCK_NO_PLAN=1 serves a run that is still researching: no plan, scenarios or assumptions yet.
+const inProgress = !!process.env.MOCK_NO_PLAN
 const profile = load("company_profile.sample") ?? {}
 const topics = new Map(asArray(load("topic.sample")).map((t) => [t.id, t]))
+if (inProgress) {
+	// early-run shape: most topics not scored yet, several workers busy
+	const more = [
+		["t_003", "Regulator guidance on data residency", "regulation", "scouting", 0.7, undefined, ["a_04"]],
+		["t_004", "Route optimisation vendor landscape", "competitors", "queued", 0.75, undefined, []],
+		["t_005", "Driver labour cost trends in the Western Balkans", "costs", "shallow", 0.55, 0.35, ["a_05"]],
+		["t_006", "SaaS pricing benchmarks for logistics software", "pricing", "deep", 0.8, 0.45, ["a_06"]],
+		["t_007", "Fuel price outlook", "costs", "scouting", 0.5, undefined, []],
+	]
+	for (const [id, title, category, state, importance_prior, confidence, assigned_agents] of more)
+		topics.set(id, { schema_version: "1.0", id, run_id: "r_demo1", title, category, state, importance_prior, ...(confidence !== undefined ? { confidence, impact: importance_prior } : {}), assigned_agents, reassignment_count: 0 })
+}
 const findings = new Map(asArray(load("finding.sample")).map((f) => [f.id, f]))
 const sources = new Map(asArray(load("source.sample")).map((s) => [s.id, s]))
-const assumptions = new Map(asArray(load("assumption.sample")).map((a) => [a.id, a]))
-const scenarios = new Map(asArray(load("scenario.sample")).map((s) => [s.id, s]))
-const plan = load("business_plan.sample")
+const assumptions = new Map((inProgress ? [] : asArray(load("assumption.sample"))).map((a) => [a.id, a]))
+const scenarios = new Map((inProgress ? [] : asArray(load("scenario.sample"))).map((s) => [s.id, s]))
+const plan = inProgress ? undefined : load("business_plan.sample")
 const checkpoints = new Map([["cp_topics", { id: "cp_topics", kind: "topics", status: "pending" }]])
 
 const script = asArray(load("agent_event.sample")).sort((a, b) => a.seq - b.seq)

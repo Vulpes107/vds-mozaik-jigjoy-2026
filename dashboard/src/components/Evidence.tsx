@@ -4,6 +4,7 @@ import { sourceStats } from "../derive.ts"
 import { confWord, dateOnly, pct } from "../fmt.ts"
 import { Chip, Section, usePrinting } from "../ui.tsx"
 
+const SRC_SHOWN = 6
 const ROW = 84
 const VIEW = 440
 
@@ -35,6 +36,7 @@ export function Evidence({ findings, sources, focus }: { findings: Finding[]; so
 	const [q, setQ] = useState("")
 	const [only, setOnly] = useState<"all" | "conflict" | "stale" | "unverified">("all")
 	const [scroll, setScroll] = useState(0)
+	const [allSrc, setAllSrc] = useState(false)
 	const box = useRef<HTMLDivElement>(null)
 	const byId = useMemo(() => new Map(findings.map((f) => [f.id, f])), [findings])
 	const srcById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
@@ -79,7 +81,7 @@ export function Evidence({ findings, sources, focus }: { findings: Finding[]; so
 					</ul>
 					{stats.flagged > 0 && <p className="banner crit" role="alert"><b>Injection attempt</b>Flagged text was treated as data only and never used as instructions.</p>}
 					<ul className="srcs">
-						{[...sources].sort((a, b) => b.reliability - a.reliability).map((s) => (
+						{[...sources].sort((a, b) => b.reliability - a.reliability).slice(0, allSrc ? undefined : SRC_SHOWN).map((s) => (
 							<li key={s.id}>
 								<a href={s.url} target="_blank" rel="noreferrer noopener">{s.title ?? s.publisher ?? s.url}</a>
 								<span className="meta"><span className="asof">{s.id}</span> {s.source_type ?? "source"} {s.injection_flagged && <Chip kind="flag">flagged</Chip>}</span>
@@ -87,6 +89,7 @@ export function Evidence({ findings, sources, focus }: { findings: Finding[]; so
 							</li>
 						))}
 					</ul>
+					{sources.length > SRC_SHOWN && <button className="btn link" style={{ marginTop: 10 }} onClick={() => setAllSrc(!allSrc)}>{allSrc ? "Show fewer sources" : `Show all ${sources.length} sources`}</button>}
 				</div>
 			</div>
 		</Section>

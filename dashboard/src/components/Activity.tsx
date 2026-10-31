@@ -4,6 +4,7 @@ import { allocationAt, droppedAt, moveStory } from "../derive.ts"
 import { label } from "../fmt.ts"
 import { Glyph, Section, roleStyle } from "../ui.tsx"
 
+const FEED_SHOWN = 8
 const ROLES = ["scout", "collector", "analyst", "verifier"]
 const ev = (e: AgentEvent) => label(e.type)
 
@@ -32,6 +33,7 @@ function useGlide(deps: unknown) {
 
 export function Activity({ events, topics }: { events: AgentEvent[]; topics: Topic[] }) {
 	const [pos, setPos] = useState<number | null>(null) // null = follow live
+	const [allEvents, setAllEvents] = useState(false)
 	const upTo = pos ?? events.length
 	const agents = useMemo(() => allocationAt(events, topics, upTo), [events, topics, upTo])
 	const gone = useMemo(() => droppedAt(events, upTo), [events, upTo])
@@ -63,7 +65,7 @@ export function Activity({ events, topics }: { events: AgentEvent[]; topics: Top
 					<h3 className="sub">Event feed (newest first)</h3>
 					{shown.length === 0 ? <p className="note">No events yet. Agents start once you approve the topic list.</p> : (
 						<ol className="feed" aria-live="polite" aria-label="Agent events">
-							{[...shown].reverse().map((e, i) => (
+							{[...shown].reverse().slice(0, allEvents ? undefined : FEED_SHOWN).map((e, i) => (
 								<li key={e.seq ?? i}>
 									<span className="t">{clock(e)}</span>
 									<span>
@@ -75,6 +77,7 @@ export function Activity({ events, topics }: { events: AgentEvent[]; topics: Top
 							))}
 						</ol>
 					)}
+					{shown.length > FEED_SHOWN && <button className="btn link" style={{ marginTop: 10 }} onClick={() => setAllEvents(!allEvents)}>{allEvents ? "Show only the latest" : `Show all ${shown.length} events`}</button>}
 				</div>
 				<div>
 					<h3 className="sub">Who is working on what</h3>

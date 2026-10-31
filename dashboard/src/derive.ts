@@ -160,6 +160,8 @@ export function mapStory(topics: Topic[]): string[] {
 	const live = topics.filter((t) => t.state !== "dropped" && t.confidence !== undefined)
 	const need = live.filter((t) => (t.impact ?? t.importance_prior) >= 0.5 && (t.confidence ?? 0) < 0.5)
 	const out: string[] = []
+	const unscored = topics.filter((t) => t.state !== "dropped" && t.confidence === undefined)
+	if (unscored.length) out.push(`${unscored.length} topic${unscored.length > 1 ? "s have" : " has"} no confidence score yet and sit${unscored.length > 1 ? "" : "s"} on the left edge until research reports back.`)
 	if (need.length) out.push(`${need.map((t) => t.id).join(", ")} matter a lot but are poorly evidenced. More research would change the plan most here.`)
 	else if (live.length) out.push("No high-impact topic is poorly evidenced.")
 	const inc = topics.filter((t) => t.state === "research_incomplete")
