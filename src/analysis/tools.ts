@@ -43,7 +43,7 @@ export function createAnalysisTools(session: AnalysisSession): Record<string, To
 
 	T.upsert_assumption = tool(
 		"upsert_assumption",
-		"Create or update an assumption (a driver such as price, volume, churn, cost). Give a realistic low/base/high range grounded in findings; cite them in basis_finding_ids. Without findings it is stored as an unsupported default with capped confidence.",
+		"Create or update an assumption (a driver such as price, volume, churn, cost). Give a realistic low/base/high range grounded in findings; cite them in basis_finding_ids. Stored confidence never exceeds the mean confidence of the cited findings; without findings it is an unsupported default capped at 0.4.",
 		{
 			type: "object",
 			required: ["text", "unit", "low", "base", "high"],
@@ -67,6 +67,8 @@ export function createAnalysisTools(session: AnalysisSession): Record<string, To
 			const id: string = a.id ?? session.nextAssumptionId()
 			const prev = state.assumptions.get(id)
 			const supported = basis.length > 0
+			// Code decides the number: the model's confidence is only an upper bound on what the cited findings carry.
+			const evidence = supported ? basis.reduce((sum, f) => sum + Number(state.findings.get(f)?.confidence ?? 0), 0) / basis.length : 0
 			const obj: Obj = {
 				schema_version: "1.0",
 				id,
@@ -78,7 +80,7 @@ export function createAnalysisTools(session: AnalysisSession): Record<string, To
 				high: a.high,
 				basis_finding_ids: basis,
 				origin: supported ? "research" : "default",
-				confidence: Math.max(0, Math.min(supported ? (a.confidence ?? 0.6) : Math.min(a.confidence ?? 0.4, 0.4), 1)),
+				confidence: Math.max(0, Math.min(supported ? Math.min(a.confidence ?? 1, evidence) : Math.min(a.confidence ?? 0.4, 0.4), 1)),
 			}
 			if (prev && prev.user_override !== undefined) obj.user_override = prev.user_override // never discard a user's override
 			assertValid("assumption", obj)

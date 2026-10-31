@@ -14,12 +14,12 @@ export interface Intake {
 export const DRAFT_KEY = "intake.draft"
 
 /** Mirrors the orchestrator defaults (`defaultRunBudget`); the team gateway budget is $20 for all runs. */
-export const RECOMMENDED = { usd: 2, seconds: 1800 }
+export const RECOMMENDED = { usd: 4, seconds: 1800 }
 
 /** Measured on the 2026-10-30 runs (Haiku workers, 6 slots): 0.03-0.05 USD per slot-minute including the planner. */
 export const USD_PER_SLOT_MINUTE = 0.04
-/** Roles are added in this order as the budget allows: a scout, collector and analyst first (nothing works without them), a verifier next, then parallelism. */
-const SLOT_ORDER: Role[] = ["scout", "collector", "analyst", "verifier", "scout", "analyst", "collector", "scout"]
+/** Roles are added in this order as the budget allows: a scout, collector and analyst first (nothing works without them), a verifier next, then parallelism. The planner caps topics per collector+analyst+verifier trio, so the eighth slot is a second verifier, not a third scout. */
+const SLOT_ORDER: Role[] = ["scout", "collector", "analyst", "verifier", "scout", "analyst", "collector", "verifier"]
 
 /** Agents per role that the money can keep busy for the whole runtime: enough to spend the budget in the time given, never fewer than one scout/collector/analyst. */
 export function sizeSlots(b: Budget = {}): Record<Role, number> {
@@ -47,7 +47,7 @@ export function recommend(p: CompanyProfile): Advice {
 	const runway = netBurn > 0 && f.cash_on_hand !== undefined ? f.cash_on_hand / netBurn : null
 	return {
 		// More products -> more topics -> more time and money; both stay under the team cap.
-		run_budget: { usd: Math.min(5, RECOMMENDED.usd + extra), seconds: Math.min(3600, RECOMMENDED.seconds + 600 * extra) },
+		run_budget: { usd: Math.min(10, RECOMMENDED.usd + extra), seconds: Math.min(3600, RECOMMENDED.seconds + 600 * extra) },
 		horizon_years: 3,
 		risk_appetite: runway !== null && runway < 6 ? "low" : runway === null && (f.cash_on_hand ?? 0) > 12 * (f.monthly_burn ?? 0) ? "high" : "medium",
 		investable_budget: f.cash_on_hand !== undefined ? Math.round(f.cash_on_hand * 0.5) : undefined,

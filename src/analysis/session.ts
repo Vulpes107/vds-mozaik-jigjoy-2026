@@ -73,15 +73,17 @@ export class AnalysisSession {
 		const p = (this.state.profile ?? {}) as Record<string, unknown>
 		const f = (p.financials ?? {}) as Record<string, unknown>
 		const currency = typeof p.currency === "string" ? p.currency : "EUR"
-		const add = (text: string, base: number) => {
+		// A figure the user typed into the profile is their own data (origin "user"), not an unsupported default.
+		const add = (text: string, stated: number | undefined) => {
 			const id = this.nextAssumptionId()
-			const obj: Obj = { schema_version: "1.0", id, run_id: this.state.runId, text, unit: currency, low: base * 0.85, base, high: base * 1.15, basis_finding_ids: [], origin: "default", confidence: 0.3 }
+			const base = stated ?? 0
+			const obj: Obj = { schema_version: "1.0", id, run_id: this.state.runId, text, unit: currency, low: base * 0.85, base, high: base * 1.15, basis_finding_ids: [], origin: stated === undefined ? "default" : "user", confidence: stated === undefined ? 0.3 : 0.9 }
 			assertValid("assumption", obj)
 			this.state.assumptions.set(id, obj)
 			return id
 		}
-		const revenue = add("Annual revenue as stated in the company profile (illustrative baseline, no research basis)", typeof f.annual_revenue === "number" ? f.annual_revenue : 0)
-		const opex = add("Annual operating cost from the profile's monthly burn (illustrative baseline, no research basis)", typeof f.monthly_burn === "number" ? f.monthly_burn * 12 : 0)
+		const revenue = add("Annual revenue as stated in the company profile (illustrative baseline, no research basis)", typeof f.annual_revenue === "number" ? f.annual_revenue : undefined)
+		const opex = add("Annual operating cost from the profile's monthly burn (illustrative baseline, no research basis)", typeof f.monthly_burn === "number" ? f.monthly_burn * 12 : undefined)
 		this.computeSpec({
 			id: "sc_baseline",
 			name: "Do nothing (illustrative baseline from the company profile)",

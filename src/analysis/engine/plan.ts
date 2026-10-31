@@ -92,13 +92,8 @@ export interface PlanOutput {
 const UNRESOLVED_STATES = new Set(["queued", "scouting", "deep", "research_incomplete"])
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US")
 
-/** Confidence in the evidence behind the numbers, weighted by how much each assumption moves the result. */
-export function overallConfidence(
-	assumptions: readonly Assumption[],
-	weights: ReadonlyMap<string, number>,
-	unresolved: number,
-	haveFindings: boolean,
-): number {
+/** Confidence in the evidence behind the numbers, weighted by how much each assumption moves the result. Unfinished topics are disclosed, not penalised. */
+export function overallConfidence(assumptions: readonly Assumption[], weights: ReadonlyMap<string, number>, haveFindings: boolean): number {
 	let num = 0
 	let den = 0
 	for (const a of assumptions) {
@@ -110,7 +105,6 @@ export function overallConfidence(
 		den += w
 	}
 	let conf = den ? num / den : 0.3
-	conf *= 1 - 0.05 * Math.min(unresolved, 6)
 	if (!haveFindings) conf *= 0.6
 	return round(Math.max(0, Math.min(1, conf)), 2)
 }
@@ -142,7 +136,7 @@ export function assemblePlan(input: PlanInput): PlanOutput {
 	}
 	const unresolved = input.topics.filter((t) => UNRESOLVED_STATES.has(t.state)).map((t) => t.id)
 	const dropped = input.topics.filter((t) => t.state === "dropped").map((t) => t.id)
-	const confidence = overallConfidence(input.assumptions, weights, unresolved.length, input.findings.length > 0)
+	const confidence = overallConfidence(input.assumptions, weights, input.findings.length > 0)
 
 	// Best (highest base NPV) scenario per strategic option.
 	const best = new Map<Option, (typeof cases)[number]>()
