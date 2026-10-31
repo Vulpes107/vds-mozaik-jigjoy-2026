@@ -17,10 +17,12 @@ const hostOf = (url: string): string => {
 }
 
 const DOMAIN_RULES: [RegExp, SourceType][] = [
+	// Journals and medical/scientific archives come before the .gov rule: a PubMed study is research, not a regulator.
+	[/(^|\.)(nih\.gov|ncbi\.nlm\.nih\.gov|pubmed\.gov|europepmc\.org|nature\.com|science\.org|sciencedirect\.com|springer\.com|wiley\.com|tandfonline\.com|frontiersin\.org|plos\.org|mdpi\.com|apa\.org|sagepub\.com|cambridge\.org|oup\.com|jamanetwork\.com|thelancet\.com|bmj\.com|cell\.com|elifesciences\.org|biorxiv\.org|medrxiv\.org|semanticscholar\.org|scholar\.google\.com)$/, "analyst_report"],
 	[/(^|\.)(gov|mil|europa\.eu|gov\.[a-z]{2}|gob\.[a-z]{2}|gouv\.[a-z]{2}|admin\.ch|parlament\.[a-z]+)$/, "regulator"],
 	[/(^|\.)(sec\.gov|edgar|companieshouse\.gov\.uk|sedar|handelsregister|apr\.gov\.rs|e-justice\.europa\.eu|opencorporates\.com)/, "filing"],
 	[/(^|\.)(reuters|bloomberg|ft|wsj|bbc|cnbc|economist|forbes|theguardian|nytimes|techcrunch|euronews|politico|n1info|b92|rts|apnews|theverge|wired|arstechnica|venturebeat|zdnet|pocketgamer|gamesindustry|gamedeveloper|mobilegamer)\.[a-z.]+$/, "news"],
-	[/(^|\.)(gartner|forrester|idc|statista|mckinsey|bcg|deloitte|pwc|kpmg|ey|oecd|worldbank|imf|eurostat|sensortower|data\.ai|appmagic|newzoo|grandviewresearch|marketsandmarkets|mordorintelligence|fortunebusinessinsights|cbinsights|crunchbase|similarweb|ibisworld|euromonitor|pitchbook|nielsen|ipsos|gsma|ericsson|cisco)\.[a-z.]+$/, "analyst_report"],
+	[/(^|\.)(gartner|forrester|idc|statista|mckinsey|bcg|deloitte|pwc|kpmg|ey|oecd|worldbank|imf|eurostat|sensortower|data\.ai|appmagic|appbrain|apptopia|appfigures|42matters|newzoo|grandviewresearch|marketsandmarkets|mordorintelligence|fortunebusinessinsights|cbinsights|crunchbase|similarweb|ibisworld|euromonitor|pitchbook|nielsen|ipsos|gsma|ericsson|cisco)\.[a-z.]+$/, "analyst_report"],
 	// Universities and research institutes publish peer-reviewed or official statistics: rated as analyst reports.
 	[/(^|\.)(edu|ac\.[a-z]{2}|edu\.[a-z]{2}|uni-[a-z]+\.[a-z]+|arxiv\.org|ssrn\.com|nber\.org|researchgate\.net)$/, "analyst_report"],
 	// App stores, standards bodies and official developer documentation are first-hand data about the thing itself.
@@ -58,6 +60,8 @@ const SEO_PATH = /\/(best|top-?\d+|vs|versus|alternatives?|review|reviews|compar
 export function resolveSourceType(url: string, suggested?: SourceType): SourceType {
 	const byDomain = classifyDomain(url)
 	if (byDomain === "regulator" || byDomain === "filing" || byDomain === "forum" || byDomain === "blog") return byDomain
+	// The model may not promote a known journal or news site to a regulator or filing; those claims only stand on unknown domains.
+	if (byDomain && (suggested === "regulator" || suggested === "filing")) return byDomain
 	return suggested ?? byDomain ?? "other"
 }
 
