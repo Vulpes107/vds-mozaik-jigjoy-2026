@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { allocationAt, cashCurve, droppedAt, firstBelowZero, groupScenarios } from "./derive.ts"
+import { allocationAt, cashCurve, droppedAt, firstBelowZero, goNoGo, groupScenarios } from "./derive.ts"
 import type { AgentEvent, Scenario, Topic } from "./types/contracts.ts"
 
 const ev = (o: Partial<AgentEvent>): AgentEvent => ({ schema_version: "1.0", ts: "2026-10-30T10:00:00Z", run_id: "r_1", type: "agent_idle", ...o }) as AgentEvent
@@ -51,4 +51,19 @@ test("npv and map stories flag affordability and weak evidence", () => {
 	const t = mapStory([{ id: "t_1", state: "deep", importance_prior: 0.8, impact: 0.85, confidence: 0.4 }, { id: "t_2", state: "dropped", importance_prior: 0.1, state_reason: "off topic" }] as unknown as Topic[])
 	assert.match(t.join(" "), /t_1 matter a lot/)
 	assert.match(t.join(" "), /t_2 \(off topic\)/)
+})
+
+const planFor = (verdict: "expand" | "exit", chosen = "sc_2") => ({ chosen_scenario_id: chosen, decisions: { continue_vs_change: { verdict, scores: {} }, investment: { currency: "EUR", low: 300000, base: 400000, high: 550000 } } }) as unknown as import("./types/contracts.ts").BusinessPlan
+const nothing = sc({ id: "sc_1", kind: "do_nothing", opex_by_year: [100000, 100000], metrics: { npv: 166000 } as Scenario["metrics"] })
+test("go/no-go: gain and extra running cost vs doing nothing; runway breach makes it conditional; exit or worse-than-nothing says no", () => {
+	const breached = sc({ id: "sc_2", kind: "expand", opex_by_year: [150000, 160000], metrics: { npv: 312000, runway_breached: true } as Scenario["metrics"] })
+	const g = goNoGo(planFor("expand"), [nothing, breached])!
+	assert.equal(g.call, "conditional")
+	assert.equal(g.gain, 146000)
+	assert.equal(g.extraOpex, 110000)
+	assert.equal(g.upfront, 400000)
+	assert.equal(goNoGo(planFor("expand"), [nothing, sc({ id: "sc_2", metrics: { npv: 312000 } as Scenario["metrics"] })])!.call, "go")
+	assert.equal(goNoGo(planFor("expand"), [nothing, sc({ id: "sc_2", metrics: { npv: 100000 } as Scenario["metrics"] })])!.call, "no")
+	assert.equal(goNoGo(planFor("exit"), [nothing, breached])!.headline, "Drop it.")
+	assert.equal(goNoGo(planFor("expand", "sc_9"), [nothing]), null)
 })
