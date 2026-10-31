@@ -136,7 +136,7 @@ test("a deep topic that ends its first pass thin gets one more collector->analys
 	// Without a topic's worth of research budget left there is no second pass.
 	const poor = board([{ id: "t_1" }], { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" }, { usd: 1, seconds: 3600 })
 	poor.findings = new Map([["f_1", { topic_id: "t_1" }]])
-	poor.spent.usd = 0.6
+	poor.spent.usd = 0.3 // research share is 0.5: 0.2 left, below one topic's worth (0.3)
 	allocate(poor, { type: EV.TopicApproved, payload: {} }, cfg, 0)
 	allocate(poor, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.9, impact: 0.9, rationale: "" } }, cfg, 1)
 	for (const [slotId, role] of [["c1", "collector"], ["an1", "analyst"], ["v1", "verifier"]] as const) {
@@ -372,4 +372,40 @@ test("replan: an empty round, a Planner that never answers, or rounds used up ea
 	a = allocate(b, { type: EV.TopicApproved, payload: {} }, { ...cfg, maxReplanRounds: 0 }, 0)
 	assert.ok(a.some((x) => x.type === EV.AnalysisRequested))
 	assert.ok(!a.some((x) => x.type === EV.ReplanRequested))
+})
+
+test("budget exhaustion marks every live topic research_incomplete so the plan, the table and the counts agree", () => {
+	const b = board([{ id: "t_1", importance_prior: 0.9 }, { id: "t_2", importance_prior: 0.5 }], { s1: "scout" }, { calls: 10 })
+	allocate(b, { type: EV.TopicApproved, payload: {} }, cfg, 1)
+	const a = allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: "s1", spent: { calls: 10 } } }, cfg, 2)
+	const req = a.find((x) => x.type === EV.AnalysisRequested) as Extract<Action, { type: typeof EV.AnalysisRequested }>
+	assert.deepEqual(req.unresolvedTopicIds, ["t_1", "t_2"])
+	assert.equal(b.topics.get("t_1")!.state, "research_incomplete")
+	assert.match(b.topics.get("t_1")!.state_reason!, /before this topic finished/)
+	assert.match(b.topics.get("t_2")!.state_reason!, /before this topic was staffed/)
+	assert.equal(a.filter((x) => x.type === EV.TopicStateChanged).length, 2)
+})
+
+test("a thin deep topic gets its second pass only when the budget also covers every topic still waiting, and waiting topics are staffed first", () => {
+	// Research share of 1 USD is 0.5 USD (the analysis reserve takes the rest): exactly one topic's worth at 0.3 USD... not two.
+	const c = { ...cfg, topicCost: { usd: 0.3, seconds: 0 } }
+	const run = (withOther: boolean) => {
+		const topics = [{ id: "t_1", importance_prior: 0.5 }, ...(withOther ? [{ id: "t_2", importance_prior: 0.9 }] : [])]
+		const b = board(topics, { s1: "scout", c1: "collector", an1: "analyst", v1: "verifier" }, { usd: 1 })
+		b.findings = new Map([["f_1", { topic_id: "t_1" }]])
+		allocate(b, { type: EV.TopicApproved, payload: {} }, c, 1)
+		allocate(b, { type: EV.TopicScored, payload: { topicId: "t_1", relevance: 0.8, impact: 0.7, rationale: "" } }, c, 2)
+		if (withOther) allocate(b, { type: EV.TopicScored, payload: { topicId: "t_2", relevance: 0.8, impact: 0.9, rationale: "" } }, c, 3)
+		// t_1's first pass: collector -> analyst -> verifier, confidence stays thin.
+		for (const [slot, role] of [["c1", "collector"], ["an1", "analyst"], ["v1", "verifier"]] as const) {
+			b.slots.get(slot)!.topicId = "t_1"
+			allocate(b, { type: EV.TopicProgress, payload: { topicId: "t_1", slotId: slot, confidence: 0.4 } }, c, 4)
+			allocate(b, { type: EV.TaskFinished, payload: { topicId: "t_1", slotId: slot, role, outcome: "done", findings: 1, sources: 1 } }, c, 5)
+		}
+		return b
+	}
+	assert.match(run(false).topics.get("t_1")!.state_reason!, /second pass/)
+	const b = run(true)
+	assert.equal(b.topics.get("t_1")!.state, "closed") // t_2 still waits for its first pass and the budget covers one topic, not two
+	assert.equal(b.slots.get("c1")!.topicId, "t_2")
 })

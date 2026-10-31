@@ -37,6 +37,7 @@ export interface AgentEvent {
     | "injection_flagged"
     | "budget_warning"
     | "budget_exhausted"
+    | "replan_requested"
     | "analysis_started"
     | "scenario_computed"
     | "plan_ready"
@@ -86,7 +87,10 @@ export interface Assumption {
    */
   user_override?: number | null;
   basis_finding_ids?: string[];
-  origin?: "research" | "user" | "default";
+  /**
+   * reference = curated, officially sourced parameter (store fee, VAT), not research.
+   */
+  origin?: "research" | "user" | "default" | "reference";
   confidence?: number;
   sensitivity_rank?: number;
 }
